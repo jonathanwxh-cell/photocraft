@@ -1,0 +1,74 @@
+[
+  [
+    "engine.execute",
+    {
+      "command": "file.new",
+      "params": {
+        "width": 640,
+        "height": 480,
+        "name": "Filter channel preview"
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "channel.new",
+      "params": {
+        "name": "Alpha preview",
+        "fill": "black"
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "select.rect",
+      "params": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 480
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "edit.fill",
+      "params": {
+        "color": "#ffffff"
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "select.deselect",
+      "params": {}
+    }
+  ],
+  [
+    "ui.set",
+    {
+      "dockTabs": {
+        "layers": 1
+      }
+    }
+  ],
+  [
+    "ui.dialog.open",
+    {
+      "kind": "command",
+      "command": "filter.blur.gaussianBlur"
+    }
+  ],
+  [
+    "ui.dialog.set",
+    {
+      "dialog": 1,
+      "field": "radius",
+      "value": 30.0
+    }
+  ]
+]
