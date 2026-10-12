@@ -1,0 +1,81 @@
+[
+  [
+    "engine.execute",
+    {
+      "command": "file.new",
+      "params": {
+        "width": 6000,
+        "height": 4000,
+        "name": "24 MP filter channel preview"
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "channel.new",
+      "params": {
+        "name": "Alpha preview",
+        "fill": "black"
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "select.rect",
+      "params": {
+        "x": 0,
+        "y": 0,
+        "width": 3000,
+        "height": 4000
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "edit.fill",
+      "params": {
+        "color": "#ffffff"
+      }
+    }
+  ],
+  [
+    "engine.execute",
+    {
+      "command": "select.deselect",
+      "params": {}
+    }
+  ],
+  [
+    "ui.set",
+    {
+      "dockTabs": {
+        "layers": 1
+      }
+    }
+  ],
+  [
+    "ui.dialog.open",
+    {
+      "kind": "command",
+      "command": "filter.blur.gaussianBlur"
+    }
+  ],
+  [
+    "ui.dialog.set",
+    {
+      "dialog": 1,
+      "field": "radius",
+      "value": 30.0
+    }
+  ]
+,
+ ["ui.dialog.set", {"dialog":1,"field":"radius","value":31.0}],
+ ["ui.dialog.set", {"dialog":1,"field":"radius","value":31.0}],
+ ["ui.dialog.set", {"dialog":1,"field":"radius","value":32.0}],
+ ["ui.dialog.set", {"dialog":1,"field":"radius","value":32.0}],
+ ["ui.inspect", {}],
+ ["ui.inspect", {}]
+]

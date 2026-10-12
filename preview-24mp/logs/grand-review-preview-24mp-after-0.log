@@ -1,0 +1,17 @@
+  6429.8 ms  engine.execute file.new
+    47.4 ms  engine.execute channel.new
+    10.9 ms  engine.execute select.rect
+    48.2 ms  engine.execute edit.fill
+     2.7 ms  engine.execute select.deselect
+    13.1 ms  ui.set
+   147.9 ms  ui.dialog.open filter.blur.gaussianBlur
+   191.5 ms  ui.dialog.set
+   190.6 ms  ui.dialog.set
+     6.4 ms  ui.dialog.set
+   280.5 ms  ui.dialog.set
+     6.7 ms  ui.dialog.set
+    22.8 ms  ui.inspect
+    19.5 ms  ui.inspect
+perf: {"commandMs":0.06600000000071304,"compositeMs":199.45769999999993,"gpu":true,"gpuBudgetMb":4096,"gpuFallback":null,"gpuInfo":{"adapter":"Microsoft Basic Render Driver","backend":"dx12","canvas":"gpu","deviceType":"cpu","driver":"10.0.26100.9278","fallback":null,"lost":null,"preference":"","selected":""},"gpuUploads":0,"lastCommand":"select.deselect","lastRefresh":"filter-preview","lastRefreshPx":1500000,"spans":{"outline":3.39,"scrollbars":0.0},"uiMaxMs":1.5829000000012456,"uiMs":4.4508231176710495,"uploadMs":32.11580000000049}
+language: {"preference":"auto","resolved":"en"}
+wrote ../grand-review-preview-24mp-after.png (1440×900)

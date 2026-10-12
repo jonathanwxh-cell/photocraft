@@ -1,0 +1,62 @@
+[
+  {
+    "version": "before",
+    "round": 1,
+    "radius30": 137.9,
+    "radius31": 145.7,
+    "repeat31": 4.3,
+    "radius32": 264.3,
+    "repeat32": 4.5,
+    "proxyPixels": 1500000
+  },
+  {
+    "version": "before",
+    "round": 2,
+    "radius30": 152.5,
+    "radius31": 222.0,
+    "repeat31": 4.9,
+    "radius32": 289.0,
+    "repeat32": 6.3,
+    "proxyPixels": 1500000
+  },
+  {
+    "version": "before",
+    "round": 3,
+    "radius30": 139.2,
+    "radius31": 138.7,
+    "repeat31": 5.0,
+    "radius32": 226.4,
+    "repeat32": 4.7,
+    "proxyPixels": 1500000
+  },
+  {
+    "version": "after",
+    "round": 1,
+    "radius30": 145.1,
+    "radius31": 125.9,
+    "repeat31": 2.9,
+    "radius32": 202.2,
+    "repeat32": 4.6,
+    "proxyPixels": 1500000
+  },
+  {
+    "version": "after",
+    "round": 2,
+    "radius30": 122.4,
+    "radius31": 123.8,
+    "repeat31": 2.9,
+    "radius32": 136.0,
+    "repeat32": 5.2,
+    "proxyPixels": 1500000
+  },
+  {
+    "version": "after",
+    "round": 3,
+    "radius30": 121.6,
+    "radius31": 124.8,
+    "repeat31": 3.3,
+    "radius32": 175.2,
+    "repeat32": 3.7,
+    "proxyPixels": 1500000
+  }
+]

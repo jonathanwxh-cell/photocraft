@@ -1,0 +1,9 @@
+[package]
+name = "gray-export-stage-bench"
+version = "0.0.0"
+edition = "2024"
+[workspace]
+[dependencies]
+photocraft-codecs = { path = "../photocraft/crates/codecs" }
+photocraft-cms = { path = "../photocraft/crates/cms" }
+thiserror = "2"

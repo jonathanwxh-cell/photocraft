@@ -1,0 +1,14 @@
+pair0 fixed=false ms=233.055 bytes=3504016
+pair0 fixed=true ms=488.654 bytes=2912016
+pair1 fixed=true ms=491.112 bytes=2912016
+pair1 fixed=false ms=229.697 bytes=3504016
+pair2 fixed=false ms=256.148 bytes=3504016
+pair2 fixed=true ms=545.203 bytes=2912016
+pair3 fixed=true ms=544.432 bytes=2912016
+pair3 fixed=false ms=249.763 bytes=3504016
+pair4 fixed=false ms=238.938 bytes=3504016
+pair4 fixed=true ms=520.200 bytes=2912016
+pair5 fixed=true ms=528.109 bytes=2912016
+pair5 fixed=false ms=244.542 bytes=3504016
+median fixed=false ms=241.740
+median fixed=true ms=524.155
