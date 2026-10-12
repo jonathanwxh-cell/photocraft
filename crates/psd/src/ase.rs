@@ -125,6 +125,14 @@ impl AseFile {
             })
             .sum()
     }
+
+    /// Iterator over every swatch in file order (loose colours followed by groups' colours).
+    pub fn swatches(&self) -> impl Iterator<Item = &AseSwatch> {
+        self.entries.iter().flat_map(|e| match e {
+            AseEntry::Swatch(s) => std::slice::from_ref(s).iter(),
+            AseEntry::Group { swatches, .. } => swatches.as_slice().iter(),
+        })
+    }
 }
 
 fn f32_be(r: &mut Reader<'_>) -> Result<f32> {
@@ -350,6 +358,8 @@ mod tests {
         assert_eq!(back, f);
         assert_eq!(write(&back).unwrap(), bytes, "byte-stable");
         assert_eq!(back.swatch_count(), 5);
+        let names: Vec<_> = back.swatches().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["Loose red", "Ink", "Lab", "Mid gray", "Odd"]);
     }
 
     #[test]
@@ -414,5 +424,18 @@ mod tests {
         let s = sw("", AseColor::Gray(0.0), AseKind::Process);
         let f = AseFile { entries: vec![AseEntry::Group { name: "g".into(), swatches: vec![s; MAX_SWATCHES + 1] }] };
         assert!(write(&f).is_err());
+    }
+
+    #[test]
+    fn swatches_iterator_covers_loose_and_groups() {
+        let f = sample();
+        let swatches: Vec<_> = f.swatches().collect();
+        assert_eq!(swatches.len(), f.swatch_count());
+        assert_eq!(swatches[0].name, "Loose red");
+        assert_eq!(swatches[1].name, "Ink");
+        assert_eq!(swatches[4].name, "Odd");
+
+        let empty = AseFile::default();
+        assert_eq!(empty.swatches().count(), 0);
     }
 }
