@@ -63,3 +63,34 @@ fn csh_import_makes_an_original_shape_available_without_a_document() {
     assert!(path.subpaths[0].closed);
     assert_eq!(path.subpaths[0].knots.len(), 3);
 }
+
+#[test]
+fn csh_failed_import_preserves_existing_presets_and_revision() {
+    let mut session = Session::new();
+    let before = session.presets.to_json(&session);
+    let revision = session.presets.rev;
+    let bytes = triangle_csh();
+    for end in [0, 11, bytes.len() - 1] {
+        assert!(session.execute("shape.presets.importCsh", json!({"data": photocraft_paint::tile::b64_encode(&bytes[..end])})).is_err());
+        assert_eq!(session.presets.to_json(&session), before);
+        assert_eq!(session.presets.rev, revision);
+    }
+    assert!(session.execute("shape.presets.importCsh", json!({"data": photocraft_paint::tile::b64_encode(&bytes), "group": 12})).is_err());
+    assert_eq!(session.presets.to_json(&session), before);
+}
+
+#[test]
+fn csh_repeat_import_names_are_unique_and_survive_preferences_reload() {
+    let mut session = Session::new();
+    let params = json!({"data": photocraft_paint::tile::b64_encode(&triangle_csh()), "group": "Original CSH"});
+    let first = session.execute("shape.presets.importCsh", params.clone()).unwrap();
+    let second = session.execute("shape.presets.importCsh", params).unwrap();
+    assert_eq!(first["count"], 1);
+    assert_eq!(second["count"], 1);
+    assert_ne!(first["group"], second["group"]);
+    assert_ne!(first["names"], second["names"]);
+    let persisted = session.presets.to_json(&session);
+    let mut restored = Session::new();
+    restored.load_presets_json(persisted);
+    assert_eq!(restored.presets.shapes, session.presets.shapes);
+}

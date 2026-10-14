@@ -27,18 +27,26 @@ pub const MAX_FILE_BYTES: u64 = 512 << 20;
 
 /// File bytes from `data` (base64) or `path`, plus a default group name.
 pub(crate) fn file_bytes(p: &Value, cmd: &str, what: &str) -> Result<(Vec<u8>, String)> {
+    file_bytes_limited(p, cmd, what, MAX_FILE_BYTES)
+}
+
+/// Read with the format's own input budget, before allocating file or decoded base64 bytes.
+pub(crate) fn file_bytes_limited(p: &Value, cmd: &str, what: &str, max_bytes: u64) -> Result<(Vec<u8>, String)> {
     if let Some(d) = p.get("data") {
         let s = d.as_str().ok_or_else(|| bad(cmd, "`data` must be a base64 string"))?;
-        if s.len() as u64 > MAX_FILE_BYTES / 3 * 4 + 4 {
+        if s.len() as u64 > max_bytes / 3 * 4 + 4 {
             return Err(bad(cmd, "`data` is too large"));
         }
         let bytes = photocraft_paint::tile::b64_decode(s).ok_or_else(|| bad(cmd, "`data` is not valid base64"))?;
+        if bytes.len() as u64 > max_bytes {
+            return Err(bad(cmd, "`data` is too large"));
+        }
         return Ok((bytes, String::new()));
     }
     let path =
         p.get("path").and_then(Value::as_str).filter(|s| !s.trim().is_empty()).ok_or_else(|| bad(cmd, format!("give `path` ({what}) or `data` (base64)")))?;
     let len = std::fs::metadata(path).map_err(|e| EngineError::Other(format!("{path}: {e}")))?.len();
-    if len > MAX_FILE_BYTES {
+    if len > max_bytes {
         return Err(bad(cmd, format!("{path}: file too large ({len} bytes)")));
     }
     let bytes = std::fs::read(path).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
