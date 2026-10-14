@@ -4742,6 +4742,29 @@ mod tests {
     }
 
     #[test]
+    fn transform_preview_preserves_displayed_profile_colors() {
+        let bounds = photocraft_geom::Rect::new(0, 0, 8, 8);
+        for wide_gamut in [false, true] {
+            let mut app = app_with_square(8, bounds);
+            app.session.edit("original color sample", |doc, active| {
+                if wide_gamut {
+                    doc.icc_profile = Some(photocraft_cms::Builtin::AdobeRgbCompat.profile().to_bytes());
+                }
+                doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap().fill_rect(bounds, &[0.55, 0.35, 0.2, 1.0]);
+                Ok(())
+            }).unwrap();
+            app.session.color.settings.monitor_profile = "srgb".into();
+            let st = app.session.active().unwrap();
+            let display = app.session.color.canvas_display(&st.doc).unwrap();
+            assert_eq!(!display.is_identity(), wide_gamut);
+            let composite = photocraft_compose::render(&st.doc, bounds);
+            let expected = crate::canvas::display_image(Some(&display), &composite);
+            let (preview, _) = preview_image(&st.doc, st.active_layer.unwrap(), None, bounds, 4096, false);
+            assert_eq!(preview.pixels[0], expected.pixels[0], "transform changed displayed color; wide_gamut={wide_gamut}");
+        }
+    }
+
+    #[test]
     fn preview_applies_the_linked_mask() {
         for linked in [true, false] {
             let app = masked_app(linked);
