@@ -22,6 +22,8 @@ jobs:
         with:
           key: csh-import-focused
           cache-on-failure: true
+      - name: Strict affected-crate Clippy
+        run: cargo clippy -p photocraft-psd -p photocraft-engine -p photocraft-ui-egui --all-targets --locked -- -D warnings
       - name: Engine CSH import regressions
         env:
           PHOTOCRAFT_CSH_FIXTURE: /tmp/photocraft-original-triangle.csh
@@ -44,8 +46,6 @@ jobs:
           path: /tmp/csh-evidence/*.png
           if-no-files-found: warn
           retention-days: 3
-      - name: Strict affected-crate Clippy
-        run: cargo clippy -p photocraft-psd -p photocraft-engine -p photocraft-ui-egui --all-targets --locked -- -D warnings
       - name: Adversarial command parameters
         run: cargo test -p photocraft-engine --test panic_hunt --locked -- --ignored
       - name: Dependency layering
