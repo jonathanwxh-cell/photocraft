@@ -68,7 +68,7 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<CshShape>> {
             return Err(PsdError::Unsupported("CSH shape version (expected 1)".into()));
         }
         let length = r.u32()?;
-        if length % 4 != 0 {
+        if !length.is_multiple_of(4) {
             return Err(PsdError::invalid("CSH shape length must be aligned to four bytes"));
         }
         let mut shape = r.sub(u64::from(length))?;
