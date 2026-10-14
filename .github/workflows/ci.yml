@@ -1,16 +1,19 @@
-name: Blend viewport candidate
+name: Blend canvas release measurement
 on:
   workflow_dispatch:
 permissions:
   contents: read
 env:
   CARGO_INCREMENTAL: '0'
-  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_RELEASE_LTO: 'false'
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+  CARGO_BUILD_JOBS: '2'
+  RAYON_NUM_THREADS: '4'
   PHOTOCRAFT_NO_PRINT: '1'
 jobs:
-  regression:
+  measurement:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -18,21 +21,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev libvulkan1 mesa-vulkan-drivers
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: menu-place-focused
-          cache-on-failure: true
-      - name: Verify blend preview transitions
-        env:
-          XDG_RUNTIME_DIR: /tmp
+      - name: Machine and compiler
         run: |
-          cargo test -p photocraft-ui-egui --lib --locked blend_ -- --nocapture --test-threads=1
-      - name: Render blend preview evidence
+          rustc -Vv
+          lscpu
+          free -h
+      - name: Measure actual canvas CPU fallback
         env:
           XDG_RUNTIME_DIR: /tmp
-        run: cargo test -p photocraft-ui-egui --lib --locked blend_viewport_visual_evidence -- --ignored --nocapture --test-threads=1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: blend-preview-evidence
-          path: crates/ui-egui/blend-evidence/*.png
-          if-no-files-found: error
+        run: cargo test --release -p photocraft-ui-egui --lib --locked blend_viewport_release_measurement -- --ignored --nocapture --test-threads=1
