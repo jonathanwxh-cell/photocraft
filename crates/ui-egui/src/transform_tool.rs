@@ -4920,6 +4920,65 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a GPU adapter; renders profile-managed transform evidence"]
+    fn transform_profile_visual_evidence() {
+        let _guard = photocraft_testkit::gpu_lock();
+        let destination = std::env::var("PHOTOCRAFT_TRANSFORM_EVIDENCE").unwrap_or_else(|_| "transform-profile-evidence".into());
+        std::fs::create_dir_all(&destination).unwrap();
+        for monitor in ["srgb", "display-p3"] {
+            let mut h = egui_kittest::Harness::builder().with_size(vec2(1200.0, 800.0)).with_max_steps(64).wgpu().build_eframe(move |cc| {
+                PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+                let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+                app.set_wgpu(cc.wgpu_render_state.as_ref().unwrap().clone());
+                app.run("file.new", json!({"width": 400, "height": 300, "background": "transparent"})).unwrap();
+                app.run("layer.new.layer", json!({})).unwrap();
+                app.session
+                    .edit("original color swatches", |doc, active| {
+                        let surface = doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap();
+                        for (x, color) in [(60, [0.55, 0.35, 0.2, 1.0]), (160, [0.2, 0.6, 0.35, 1.0]), (260, [0.3, 0.4, 0.7, 1.0])] {
+                            surface.fill_rect(photocraft_geom::Rect::new(x, 60, x + 80, 220), &color);
+                        }
+                        Ok(())
+                    })
+                    .unwrap();
+                app.session.color.settings.monitor_profile = monitor.into();
+                app.ui.extras.rulers = false;
+                app.sync_views();
+                app.ui.views[0].zoom = 1.0;
+                app.ui.views[0].center = [200.0, 150.0];
+                app.ui.views[0].fit_pending = false;
+                app
+            });
+            h.run_steps(8);
+            let app = h.state();
+            let view = &app.ui.views[0];
+            let xf = ViewXform { rect: app.last_canvas_rect, zoom: view.zoom, center: view.center, flip: false, rotation: 0.0, aspect: 1.0 };
+            let points = [100.0, 200.0, 300.0].map(|x| xf.to_screen(x, 100.0) * h.ctx.pixels_per_point());
+            let before = h.render().unwrap();
+            before.save(std::path::Path::new(&destination).join(format!("{monitor}-before.png"))).unwrap();
+            let ctx = h.ctx.clone();
+            begin(h.state_mut(), &ctx).unwrap();
+            h.run_steps(8);
+            assert!(h.state().ui.transform.is_some());
+            let during = h.render().unwrap();
+            during.save(std::path::Path::new(&destination).join(format!("{monitor}-during.png"))).unwrap();
+            commit(h.state_mut());
+            h.run_steps(8);
+            assert!(h.state().ui.transform.is_none());
+            let after = h.render().unwrap();
+            after.save(std::path::Path::new(&destination).join(format!("{monitor}-after.png"))).unwrap();
+            for point in points {
+                let at = |image: &image::RgbaImage| image.get_pixel(point.x as u32, point.y as u32).0;
+                let expected = at(&before);
+                assert_ne!(expected[0], expected[1], "sample must hit a color swatch, not the checkerboard");
+                for actual in [at(&during), at(&after)] {
+                    assert!(actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2), "{monitor}: before={expected:?}, shown={actual:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn preview_feathers_the_linked_mask() {
         // A feathered pixel mask without a vector mask: the compositor softens the edge at x 16,
         // so the moving texels must be soft there too, not hard until the commit (#4560).

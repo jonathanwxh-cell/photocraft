@@ -29,3 +29,15 @@ jobs:
         run: cargo fmt --all -- --check
       - name: UI lint
         run: cargo clippy -p photocraft-ui-egui --all-targets --locked -- -D warnings
+      - name: Render transform profile evidence
+        env:
+          PHOTOCRAFT_TRANSFORM_EVIDENCE: transform-profile-evidence
+          XDG_RUNTIME_DIR: /tmp
+        run: cargo test -p photocraft-ui-egui --lib --locked transform_profile_visual_evidence -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transform-profile-evidence
+          path: transform-profile-evidence/*.png
+          if-no-files-found: warn
+          retention-days: 3
