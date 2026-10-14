@@ -14,6 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - name: System dependencies
         run: |
           sudo apt-get update
@@ -22,9 +24,7 @@ jobs:
         with:
           key: transform-color-focused
           cache-on-failure: true
-      - name: Formatting
-        run: cargo fmt --all -- --check
-      - name: UI lint
-        run: cargo clippy -p photocraft-ui-egui --all-targets --locked -- -D warnings
-      - name: Release 24MP profile preparation
-        run: cargo test --release -p photocraft-ui-egui --lib --locked transform_profile_upload_cost -- --ignored --nocapture
+      - name: WASM
+        run: cargo xtask wasm
+      - name: Quick UI performance
+        run: cargo xtask perf --quick --bench layout_bench
