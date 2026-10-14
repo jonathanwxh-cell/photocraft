@@ -8019,6 +8019,45 @@ mod blend_viewport_regression {
     use serde_json::json;
 
     #[test]
+    #[ignore = "release-only 24 MP canvas measurement"]
+    fn blend_viewport_release_measurement() {
+        assert!(!cfg!(debug_assertions), "measure an optimized build");
+        let _guard = photocraft_testkit::gpu_lock();
+        let rs = egui_kittest::wgpu::create_render_state(crate::gpu_canvas::wgpu_setup(), Default::default());
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.set_wgpu(rs);
+        app.run("file.new", json!({"width":6000,"height":4000,"background":"#336699"})).unwrap();
+        let layer = app.run("layer.new.layer", json!({})).unwrap()["layer"].as_u64().unwrap();
+        app.run("edit.fill", json!({"color":"#cc8844"})).unwrap();
+        app.run("layer.layerStyle.blendingOptions", json!({"knockout":"shallow"})).unwrap();
+        let ctx = egui::Context::default();
+        let full = DRect::new(0, 0, 6000, 4000);
+        let visible = DRect::new(2048, 1024, 3328, 1744);
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        assert!(app.redraws.is_empty());
+        println!("BLEND_CANVAS_ADAPTER {:?}", app.perf.gpu_info);
+        // Alternate order, restoring the committed document before every timed hover.
+        // The full view measures the same refresh path over the baseline's full layer region.
+        for sample in 0..6 {
+            let regions = if sample % 2 == 0 { [full, visible] } else { [visible, full] };
+            for region in regions {
+                crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), None);
+                assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+                crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), Some(BlendMode::Multiply));
+                let start = std::time::Instant::now();
+                assert!(ensure_gpu(&mut app, &ctx, 0, region));
+                let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+                assert_eq!(app.perf.last_refresh_px, region.width() as u64 * region.height() as u64);
+                assert_eq!(app.perf.last_refresh, "rect", "must measure synchronous CPU fallback");
+                if sample > 0 {
+                    println!("BLEND_CANVAS sample={sample} pixels={} cpu_refresh_submit_ms={elapsed:.3}", app.perf.last_refresh_px);
+                }
+            }
+        }
+        assert_visible_pixels(&mut app, visible);
+    }
+
+    #[test]
     fn blend_hover_refresh_is_limited_to_visible_canvas() {
         check_blend_viewport(false);
     }
