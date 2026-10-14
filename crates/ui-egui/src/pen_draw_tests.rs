@@ -110,6 +110,43 @@ fn unfinished_pen_path_does_not_follow_a_new_document() {
     assert_ne!(h.state().session.active().unwrap().doc.id, first_doc);
     assert!(h.state().ui.pen.is_none(), "a new document must not inherit another document's unfinished Pen path");
     assert!(h.state().session.active().unwrap().doc.work_path.is_none());
+
+    h.state_mut().session.set_active(0);
+    // The application synchronizes document views before handling input each frame.
+    h.state_mut().sync_views();
+    h.run_steps(3);
+    assert_eq!(h.state().ui.pen.as_ref(), Some(&original), "returning to the original document must preserve its draft");
+    h.key_press(Key::Enter);
+    h.run_steps(2);
+    assert!(h.state().ui.pen.is_none());
+    let path = h.state().session.active().unwrap().doc.work_path.as_ref().unwrap();
+    assert_eq!(path.subpaths[0].knots.len(), 2);
+    assert!(h.state().session.documents()[1].doc.work_path.is_none(), "committing the first draft must not change the second document");
+}
+
+#[test]
+fn unfinished_pen_path_tracks_document_identity_when_another_document_closes() {
+    let mut h = harness();
+    click(&mut h, [20.0, 20.0]);
+    click(&mut h, [100.0, 60.0]);
+    h.state_mut().run("file.new", json!({"width": 320, "height": 240})).unwrap();
+    h.run_steps(3);
+    assert!(h.state().ui.pen.is_none());
+    for [x, y] in [[30.0, 40.0], [140.0, 90.0]] {
+        crate::vector_ui::pen_down(h.state_mut(), x, y);
+        crate::vector_ui::pen_up(h.state_mut());
+    }
+    let second_doc = h.state().session.active().unwrap().doc.id;
+    let second_draft = h.state().ui.pen.clone().unwrap();
+    h.state_mut().run("file.close", json!({"document": 0})).unwrap();
+    h.run_steps(3);
+    assert_eq!(h.state().session.active().unwrap().doc.id, second_doc);
+    assert_eq!(h.state().ui.pen.as_ref(), Some(&second_draft), "closing another tab must not replace this document's draft");
+
+    h.state_mut().run("file.close", json!({"document": 0})).unwrap();
+    h.state_mut().run("file.new", json!({"width": 200, "height": 150})).unwrap();
+    h.run_steps(3);
+    assert!(h.state().ui.pen.is_none(), "a new document at the same tab index must not revive a closed document's draft");
 }
 
 #[test]
