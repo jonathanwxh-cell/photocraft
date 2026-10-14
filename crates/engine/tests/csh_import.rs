@@ -4,45 +4,9 @@
 use photocraft_engine::Session;
 use serde_json::json;
 
-fn triangle_csh() -> Vec<u8> {
-    let mut out = b"cush".to_vec();
-    out.extend_from_slice(&2u32.to_be_bytes());
-    out.extend_from_slice(&1u32.to_be_bytes());
-    let name: Vec<u16> = "Triangle".encode_utf16().chain(std::iter::once(0)).collect();
-    out.extend_from_slice(&(name.len() as u32).to_be_bytes());
-    for unit in &name {
-        out.extend_from_slice(&unit.to_be_bytes());
-    }
-    if name.len() % 2 != 0 {
-        out.extend_from_slice(&[0, 0]);
-    }
-    out.extend_from_slice(&1u32.to_be_bytes());
-    let mut body = vec![36];
-    body.extend_from_slice(b"00000000-0000-4000-8000-000000000001");
-    for bound in [0i32, 0, 100, 200] {
-        body.extend_from_slice(&bound.to_be_bytes());
-    }
-    for selector in [6u16, 8] {
-        body.extend_from_slice(&selector.to_be_bytes());
-        body.extend_from_slice(&[0; 24]);
-    }
-    body.extend_from_slice(&0u16.to_be_bytes());
-    body.extend_from_slice(&3u16.to_be_bytes());
-    body.extend_from_slice(&[0; 22]);
-    for (x, y) in [(0.25f64, 0.25f64), (0.75, 0.25), (0.5, 0.75)] {
-        body.extend_from_slice(&2u16.to_be_bytes());
-        for _ in 0..3 {
-            body.extend_from_slice(&((y * 16_777_216.0) as i32).to_be_bytes());
-            body.extend_from_slice(&((x * 16_777_216.0) as i32).to_be_bytes());
-        }
-    }
-    while body.len() % 4 != 0 {
-        body.push(0);
-    }
-    out.extend_from_slice(&(body.len() as u32).to_be_bytes());
-    out.extend_from_slice(&body);
-    out
-}
+#[path = "../../psd/tests/common/csh_fixture.rs"]
+mod fixture;
+use fixture::{polygon_csh, triangle_csh};
 
 #[test]
 fn csh_import_makes_an_original_shape_available_without_a_document() {
@@ -62,6 +26,8 @@ fn csh_import_makes_an_original_shape_available_without_a_document() {
     assert_eq!(path.subpaths.len(), 1);
     assert!(path.subpaths[0].closed);
     assert_eq!(path.subpaths[0].knots.len(), 3);
+    // The reference bounds are twice as wide as tall; normalization must preserve that.
+    assert_eq!(path.control_bounds().unwrap(), (0.0, 25.0, 100.0, 75.0));
 }
 
 #[test]
@@ -93,4 +59,24 @@ fn csh_repeat_import_names_are_unique_and_survive_preferences_reload() {
     let mut restored = Session::new();
     restored.load_presets_json(persisted);
     assert_eq!(restored.presets.shapes, session.presets.shapes);
+}
+
+#[test]
+fn csh_same_winding_inner_subpath_stays_a_hole_after_place_and_reload() {
+    // Same winding intentionally: a nonzero union would incorrectly fill the hole.
+    let bytes =
+        polygon_csh(&[&[(0.125, 0.125), (0.875, 0.125), (0.875, 0.875), (0.125, 0.875)], &[(0.375, 0.375), (0.625, 0.375), (0.625, 0.625), (0.375, 0.625)]]);
+    let mut imported = Session::new();
+    let result = imported.execute("shape.presets.importCsh", json!({"data": photocraft_paint::tile::b64_encode(&bytes)})).unwrap();
+    let mut s = Session::new();
+    s.load_presets_json(imported.presets.to_json(&imported));
+    s.execute("file.new", json!({"width": 96, "height": 96, "background": "transparent"})).unwrap();
+    s.execute("shape.presets.place", json!({"preset": result["names"][0], "rect": [8, 8, 80, 80], "keepAspect": false, "fill": "#ff0000"})).unwrap();
+    let image = photocraft_compose::flatten(&s.active().unwrap().doc);
+    assert!(image.px[48 * 96 + 16][0] > 0.99, "ring must remain red");
+    assert!(image.px[48 * 96 + 16][3] > 0.99, "ring must remain opaque");
+    assert!(image.px[48 * 96 + 48][3] < 0.01, "inner subpath must remain transparent");
+    assert!(image.px[4 * 96 + 4][3] < 0.01, "outside shape must remain transparent");
+    s.execute("edit.undo", json!({})).unwrap();
+    assert!(photocraft_compose::flatten(&s.active().unwrap().doc).px.iter().all(|pixel| pixel[3] < 0.01));
 }

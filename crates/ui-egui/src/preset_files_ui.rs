@@ -123,6 +123,10 @@ pub fn open(app: &mut PhotocraftApp, name: &str, bytes: &[u8]) -> Option<Result<
 }
 
 #[cfg(test)]
+#[path = "../../psd/tests/common/csh_fixture.rs"]
+mod csh_fixture;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -136,5 +140,26 @@ mod tests {
         assert!(is_preset_file("Original.CSH"));
         assert!(!is_preset_file("photo.psd"));
         assert!(!is_preset_file("abr"));
+    }
+
+    #[test]
+    fn csh_open_imports_presets_and_shows_shapes_without_opening_a_document() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        open(&mut app, "Original.CSH", &csh_fixture::triangle_csh()).unwrap().unwrap();
+        assert!(app.session.active().is_none());
+        assert!(app.ui.panels.shapes);
+        assert!(!app.ui.status_error);
+        let imported = app.session.presets.shapes.iter().find(|g| g.name == "Original").unwrap();
+        assert_eq!(imported.items.len(), 1);
+        assert_eq!(imported.items[0].name, "Triangle");
+    }
+
+    #[test]
+    fn malformed_csh_open_preserves_the_library() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        let before = app.session.presets.to_json(&app.session);
+        assert!(open(&mut app, "broken.csh", b"cush").unwrap().is_err());
+        assert_eq!(app.session.presets.to_json(&app.session), before);
+        assert!(app.session.active().is_none());
     }
 }
