@@ -4968,10 +4968,10 @@ mod tests {
             let after = h.render().unwrap();
             after.save(std::path::Path::new(&destination).join(format!("{monitor}-after.png"))).unwrap();
             for point in points {
-                let at = |image: &image::RgbaImage| image.get_pixel(point.x as u32, point.y as u32).0;
-                let expected = at(&before);
+                let (x, y) = (point.x as u32, point.y as u32);
+                let expected = before.get_pixel(x, y).0;
                 assert_ne!(expected[0], expected[1], "sample must hit a color swatch, not the checkerboard");
-                for actual in [at(&during), at(&after)] {
+                for actual in [during.get_pixel(x, y).0, after.get_pixel(x, y).0] {
                     assert!(actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2), "{monitor}: before={expected:?}, shown={actual:?}");
                 }
             }
