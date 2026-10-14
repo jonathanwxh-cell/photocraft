@@ -1,6 +1,6 @@
 # File-format parity
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (PSD: `Mt16`/`Mt32` merged transparency read; palette PNGs open in Indexed Color mode, #4804; earlier: CMYK Invert, Posterize and Threshold on the inks; 16-bit Lab Invert; Photoshop-oracle floor 145/258; `.atn` import maps 112 events; DDS textures open, #1327; DPX read and write, #1049; #2465 fixed: CS2 placed layers with only a `PlLd` block open their contents; Photoshop Actions `.atn` read and write; `.shc` contour files read and write; earlier the same day: indexed BMP palette mode; Save keeps a JPEG's quality and a WebP's encoding) · **Target:** Adobe Photoshop 2026
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-14 · **Change:** minor (CSH custom-shape import, #5359; PSD: `Mt16`/`Mt32` merged transparency read; palette PNGs open in Indexed Color mode, #4804; earlier: CMYK Invert, Posterize and Threshold on the inks; 16-bit Lab Invert; Photoshop-oracle floor 145/258; `.atn` import maps 112 events; DDS textures open, #1327; DPX read and write, #1049; #2465 fixed: CS2 placed layers with only a `PlLd` block open their contents; Photoshop Actions `.atn` read and write; `.shc` contour files read and write; earlier the same day: indexed BMP palette mode; Save keeps a JPEG's quality and a WebP's encoding) · **Target:** Adobe Photoshop 2026
 
 Every format Photoshop 2026 (27.11.0) reads or writes, with PhotoCraft's support, fidelity and
 tests. Photoshop's list comes from its `Info.plist` `CFBundleDocumentTypes`, the PiPL read/write
@@ -20,7 +20,8 @@ XL are missing (gap G10). Remaining: 300–500 h including PSD fidelity.
 ## Photoshop's formats
 
 | Format | Photoshop | PhotoCraft read | PhotoCraft write | Fidelity and tests |
-|---|---|---|---|---|
+|---|---|---|
+| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |---|---|
 | PSD | R/W | yes | yes | 1/8/16/32-bit; Bitmap, Gray, Indexed, RGB, CMYK, Multichannel, Lab, Duotone; layers, groups, masks, vector masks, adjustment and fill layers, effects, text, shapes, smart objects (SoLd/lnk2; CS2 PlLd/lnkD read with their warp, kept as is or re-saved as SoLd once edited), smart filters (14 mapped, rest verbatim), slices, comps, Advanced Blending. Oracle floors: Photoshop-authored 145/258, io 146/170, psd-tools 236/309; round trip ≥ 169/170, 308/309, 258/256. Known failures: #1281, #2469 (#2374, text layers, closed 2026-10-10; #2465, CS2 `PlLd`-only smart objects, fixed 2026-10-12) |
 | PSB | R/W | yes | yes | Auto-switches above 2 GB (REL-212-2); 4–5 GB fixtures generated (FILE-216-2); > 4 GB fails on Windows (#375) |
 | Cloud PSD (.psdc) | R/W | no | no | Out of scope (Adobe cloud) |
@@ -63,6 +64,7 @@ supports many more, including CR3).
 
 | Camera format | PhotoCraft | Evidence |
 |---|---|---|
+| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |
 | DNG (incl. LJPEG and JPEG XL tiles) | yes; lossy DNG no | FILE-215-11 |
 | Canon CR2 | yes | |
 | Canon CR3 | detected, unsupported | `crates/raw/src/lib.rs:219` |
@@ -84,7 +86,8 @@ D5100 colour profile. Counts and the G14 estimate are unchanged.
 ## Formats Photoshop doesn't have (ours only)
 
 | Format | Read | Write | Notes |
-|---|---|---|---|
+|---|---|---|
+| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |---|
 | `.pcraft` (native) | yes | yes | Incremental, autosave, crash recovery, atomic save |
 | Affinity `.af`, `.afphoto`, `.afdesign`, `.afpub` | yes | no | See below |
 | Paint.NET `.pdn` | yes | no | [pdn.md](pdn.md) |
@@ -123,7 +126,8 @@ remaining gaps in #1606 stay tracked with per-sample corpus ceilings.
 ## Presets and data files
 
 | Format | Photoshop | PhotoCraft | Notes |
-|---|---|---|---|
+|---|---|---|
+| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |---|
 | Brushes `.abr` | R/W | R/W | `psd/src/abr.rs` (v6/v12) |
 | Gradients `.grd` | R/W | R/W | |
 | Patterns `.pat` | R/W | R/W | |
@@ -134,7 +138,8 @@ remaining gaps in #1606 stay tracked with per-sample corpus ceilings.
 | Actions `.atn` | R/W | R/W | `psd/src/atn.rs` (version 16 sets, exact round trip), `engine/src/atn_cmds.rs` (112 Photoshop events ↔ commands; other steps kept verbatim). Panel menu, CLI `batch --actions set.atn`, `actions.load`/`actions.save`. Photoshop 5-era version 12 files unsupported (AUTO-219-2) |
 | Styles `.asl` | R/W | no | #1693 |
 | Contours `.shc` | R/W | R/W | `psd/src/shc.rs`; Contour Editor Load…/Save… (FILE-215-15). No user contour library; not yet checked against a Photoshop-written file |
-| Custom shapes `.csh`, tool presets `.tpl` | R/W | no | |
+| Custom shapes `.csh` | R/W | R | Version 2 sets through Shapes → Import Shapes… or File → Open; persistent groups via `shape.presets.importCsh`. Original generated geometry cross-read with ag-psd; not yet checked against a Photoshop-written file. No export |
+| Tool presets `.tpl` | R/W | no | |
 | Curves `.acv`, Levels `.alv`, other adjustment presets | R/W | not audited | |
 | C2PA Content Credentials | R/W | no | #1050 |
 
@@ -142,6 +147,7 @@ remaining gaps in #1606 stay tracked with per-sample corpus ceilings.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |
 | 2026-10-13 | minor | PSD: a "Saving Merged Transparency" global block (`Mtrn`, `Mt16`, `Mt32`; Photoshop's 32-bit documents keep a positive layer count) marks the merged image's first extra channel as its transparency: opening such a file no longer adds a "Transparency" alpha channel, and the oracle compares psd-tools transparentbg.psd's alpha (83.7 % → 0.9 % of pixels off; its shape edges remain) |
 | 2026-10-13 | minor | Palette PNGs open in Indexed Color mode (#4804) |
 | 2026-10-12 | minor | `.atn`: 112 events mapped (Select and Mask, Filter Gallery Spatter, Ripple, Crystallize, Pattern Fill layers, mask targeting, Step Backward, points, Bitmap) |
