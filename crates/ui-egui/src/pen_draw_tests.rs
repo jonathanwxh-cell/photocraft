@@ -97,6 +97,22 @@ fn near(a: [f64; 2], b: [f64; 2]) -> bool {
 }
 
 #[test]
+fn unfinished_pen_path_does_not_follow_a_new_document() {
+    let mut h = harness();
+    click(&mut h, [20.0, 20.0]);
+    click(&mut h, [100.0, 60.0]);
+    let original = h.state().ui.pen.clone().expect("an unfinished two-anchor path");
+    assert_eq!(original.knots.len(), 2);
+    let first_doc = h.state().session.active().unwrap().doc.id;
+
+    h.state_mut().run("file.new", json!({"width": 320, "height": 240})).unwrap();
+    h.run_steps(3);
+    assert_ne!(h.state().session.active().unwrap().doc.id, first_doc);
+    assert!(h.state().ui.pen.is_none(), "a new document must not inherit another document's unfinished Pen path");
+    assert!(h.state().session.active().unwrap().doc.work_path.is_none());
+}
+
+#[test]
 fn alt_breaks_the_handle_being_dragged_and_grabs_the_last_outgoing_handle() {
     let mut h = harness();
     click(&mut h, [20.0, 20.0]);
