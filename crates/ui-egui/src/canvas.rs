@@ -8003,3 +8003,29 @@ mod rotation_preview_isolation_tests {
 #[cfg(test)]
 #[path = "canvas_display_memo_tests.rs"]
 mod display_memo_tests;
+
+#[cfg(test)]
+mod blend_viewport_regression {
+    use super::*;
+    use photocraft_color::BlendMode;
+    use serde_json::json;
+
+    #[test]
+    fn blend_hover_refresh_is_limited_to_visible_canvas() {
+        // This verification run requires an adapter: a skipped test is not reproduction.
+        let rs = egui_kittest::wgpu::create_render_state(crate::gpu_canvas::wgpu_setup(), Default::default());
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.set_wgpu(rs);
+        app.run("file.new", json!({"width":1024,"height":768,"background":"#336699"})).unwrap();
+        let layer = app.run("layer.new.layer", json!({})).unwrap()["layer"].as_u64().unwrap();
+        app.run("edit.fill", json!({"color":"#cc8844"})).unwrap();
+        let ctx = egui::Context::default();
+        let visible = DRect::new(256, 256, 512, 512);
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        assert!(app.redraws.is_empty(), "small fixture must finish synchronously");
+        crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), Some(BlendMode::Multiply));
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        println!("BLEND_VIEWPORT kind={} pixels={} expected={} adapter={:?}", app.perf.last_refresh, app.perf.last_refresh_px, 256 * 256, app.perf.gpu_info);
+        assert_eq!(app.perf.last_refresh_px, 256 * 256, "hover must not recomposite offscreen pixels of a full-canvas layer");
+    }
+}
