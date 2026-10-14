@@ -1545,6 +1545,9 @@ fn ensure_gpu(app: &mut PhotocraftApp, ctx: &egui::Context, idx: usize, visible:
     let display_key = texture_key(display.as_deref());
     let seen = app.canvases.get(&(id, GPU_OUTPUT)).map(|c| (c.revision, c.preview_key));
     let mut damage = seen.and_then(|seen| damage_since(app, idx, seen, (revision, raw_key), display_key, last_damage));
+    if let Some(region) = damage {
+        damage = Some(crate::blend_preview::clip_damage(app, id, revision, raw_key, region, visible));
+    }
     // To an adjustment dialog's preview: only what the view shows now (the rest as it moves there).
     if damage.is_some()
         && let Some(r) = seen.filter(|s| s.0 == revision).and_then(|s| crate::adjust_preview::switch_region(app, id, revision, s.1 ^ display_key, raw_key))
@@ -1580,7 +1583,12 @@ fn ensure_gpu(app: &mut PhotocraftApp, ctx: &egui::Context, idx: usize, visible:
             let r = gpu.refresh(id.0, &doc, Some(r), display.as_deref());
             app.perf.record(r.kind, r.px, r.composite_ms, r.upload_ms);
         }
-        return true;
+        // Blend previews keep offscreen pixels untouched until the view reaches them.
+        // Use the normal refresh path so CPU fallback and pending redraws stay synchronized.
+        damage = crate::blend_preview::uncovered(app, id, revision, raw_key, visible);
+        if damage.is_none() {
+            return true;
+        }
     }
     // Display textures for a canvas this large would not fit the GPU: the reduced CPU canvas
     // draws it (checked before the memory budget, which walks the history, every frame).
@@ -8012,6 +8020,16 @@ mod blend_viewport_regression {
 
     #[test]
     fn blend_hover_refresh_is_limited_to_visible_canvas() {
+        check_blend_viewport(false);
+    }
+
+    #[test]
+    fn blend_hover_cpu_fallback_refresh_tracks_visible_canvas() {
+        check_blend_viewport(true);
+    }
+
+    fn check_blend_viewport(cpu_fallback: bool) {
+        let _guard = photocraft_testkit::gpu_lock();
         // This verification run requires an adapter: a skipped test is not reproduction.
         let rs = egui_kittest::wgpu::create_render_state(crate::gpu_canvas::wgpu_setup(), Default::default());
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
@@ -8019,10 +8037,16 @@ mod blend_viewport_regression {
         app.run("file.new", json!({"width":1024,"height":768,"background":"#336699"})).unwrap();
         let layer = app.run("layer.new.layer", json!({})).unwrap()["layer"].as_u64().unwrap();
         app.run("edit.fill", json!({"color":"#cc8844"})).unwrap();
+        if cpu_fallback {
+            app.run("layer.layerStyle.blendingOptions", json!({"knockout":"shallow"})).unwrap();
+        }
         let ctx = egui::Context::default();
         let visible = DRect::new(256, 256, 512, 512);
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         assert!(app.redraws.is_empty(), "small fixture must finish synchronously");
+        if cpu_fallback {
+            assert!(!app.perf.last_refresh.starts_with("gpu"), "fixture must exercise CPU composition fallback");
+        }
         let id = app.session.active().unwrap().doc.id;
         let gpu = app.gpu.clone().unwrap();
         let original = gpu.read_texels(id.0).unwrap();
@@ -8033,7 +8057,10 @@ mod blend_viewport_regression {
         app.perf.last_refresh_px = 0;
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         assert_eq!(app.perf.last_refresh_px, 0, "unchanged view and mode must reuse the texture");
-        let panned = DRect::new(512, 256, 768, 512);
+        let zoomed_out = DRect::new(128, 128, 640, 640);
+        assert!(ensure_gpu(&mut app, &ctx, 0, zoomed_out));
+        assert_eq!(app.perf.last_refresh_px, 512 * 512, "zooming out catches up the larger visible area");
+        let panned = DRect::new(640, 256, 896, 512);
         assert!(ensure_gpu(&mut app, &ctx, 0, panned));
         assert_eq!(app.perf.last_refresh_px, 256 * 256, "newly exposed pixels must catch up without a mode change");
         crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), Some(BlendMode::Screen));

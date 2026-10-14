@@ -1,4 +1,4 @@
-name: Blend viewport baseline
+name: Blend viewport candidate
 on:
   workflow_dispatch:
 permissions:
@@ -22,8 +22,9 @@ jobs:
         with:
           key: menu-place-focused
           cache-on-failure: true
-      - name: Reproduce offscreen blend preview redraw
+      - name: Verify blend preview transitions
         env:
           XDG_RUNTIME_DIR: /tmp
         run: |
-          cargo test -p photocraft-ui-egui --lib --locked blend_hover_refresh_is_limited_to_visible_canvas -- --nocapture --test-threads=1
+          cargo test -p photocraft-ui-egui --lib --locked blend_ -- --nocapture --test-threads=1
+
