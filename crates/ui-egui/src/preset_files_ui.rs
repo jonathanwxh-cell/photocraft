@@ -129,6 +129,7 @@ mod csh_fixture;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui_kittest::kittest::{NodeT, Queryable};
 
     #[test]
     fn recognises_preset_files() {
@@ -161,5 +162,35 @@ mod tests {
         assert!(open(&mut app, "broken.csh", b"cush").unwrap().is_err());
         assert_eq!(app.session.presets.to_json(&app.session), before);
         assert!(app.session.active().is_none());
+    }
+
+    #[test]
+    #[ignore = "requires a GPU adapter; renders the CSH import workflow for visual inspection"]
+    fn csh_panel_import_visual_evidence() {
+        let _guard = photocraft_testkit::gpu_lock();
+        let (dialog, requests) =
+            crate::file_dialog::fake(vec![Some(crate::file_dialog::FileDialogAnswer::Contents("Original.csh".into(), csh_fixture::triangle_csh()))]);
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_max_steps(64).wgpu().build_eframe(move |cc| {
+            PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+            let services = crate::Services { file_dialog: Some(dialog), ..Default::default() };
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), services);
+            app.set_wgpu(cc.wgpu_render_state.as_ref().unwrap().clone());
+            app.run("file.new", json!({"width": 400, "height": 300, "background": "transparent"})).unwrap();
+            // A user-cleared library makes the one imported fixture visible without scrolling.
+            app.session.presets.shapes.clear();
+            app.ui.panels.shapes = true;
+            app
+        });
+        h.run_steps(8);
+        h.get_by_label("Import Shapes…").click();
+        h.run_steps(12);
+        assert!(matches!(requests.borrow().first(), Some(crate::file_dialog::FileDialogRequest::Open { extensions: Some(exts), .. }) if exts == &["csh"]));
+        assert_eq!(h.state().session.presets.shapes[0].items[0].name, "Triangle");
+        assert!(!h.state().ui.status_error);
+        h.state_mut().run("shape.presets.place", json!({"preset": "Triangle", "rect": [60, 60, 280, 180], "fill": "#d85a32"})).unwrap();
+        h.run_steps(8);
+        let destination = std::env::var("PHOTOCRAFT_CSH_EVIDENCE").unwrap_or_else(|_| "csh-evidence".into());
+        std::fs::create_dir_all(&destination).unwrap();
+        h.render().unwrap().save(std::path::Path::new(&destination).join("imported-triangle.png")).unwrap();
     }
 }
