@@ -27,3 +27,12 @@ jobs:
           XDG_RUNTIME_DIR: /tmp
         run: |
           cargo test -p photocraft-ui-egui --lib --locked blend_ -- --nocapture --test-threads=1
+      - name: Render blend preview evidence
+        env:
+          XDG_RUNTIME_DIR: /tmp
+        run: cargo test -p photocraft-ui-egui --lib --locked blend_viewport_visual_evidence -- --ignored --nocapture --test-threads=1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blend-preview-evidence
+          path: crates/ui-egui/blend-evidence/*.png
+          if-no-files-found: error

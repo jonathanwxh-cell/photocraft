@@ -124,3 +124,36 @@ fn moving_between_modes_keeps_a_preview_across_the_gaps_between_them() {
     }
     assert_eq!(previewed(&mut h), Some(BlendMode::Multiply));
 }
+
+#[test]
+#[ignore = "manual rendered evidence for the viewport investigation"]
+fn blend_viewport_visual_evidence() {
+    let _guard = photocraft_testkit::gpu_lock();
+    let mut s = photocraft_engine::Session::new();
+    s.execute("file.new", json!({"width":1600,"height":1200,"background":"#336699"})).unwrap();
+    s.execute("layer.new.layer", json!({"name":"Preview layer"})).unwrap();
+    s.execute("edit.fill", json!({"color":"#cc8844"})).unwrap();
+    s.execute("select.rect", json!({"x":300,"y":300,"width":400,"height":400})).unwrap();
+    s.execute("edit.fill", json!({"color":"#55ccaa"})).unwrap();
+    s.execute("select.deselect", json!({})).unwrap();
+    let mut h = Harness::builder().with_size(vec2(1440.0, 900.0)).with_max_steps(64).wgpu().build_eframe(move |cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        let mut app = PhotocraftApp::new(s, crate::Services::default());
+        app.set_wgpu(cc.wgpu_render_state.as_ref().unwrap().clone());
+        app
+    });
+    h.run_steps(8);
+    std::fs::create_dir_all("blend-evidence").unwrap();
+    h.render().unwrap().save("blend-evidence/normal.png").unwrap();
+    let dropdown = h.query_all_by_role(Role::ComboBox).map(|n| n.rect()).max_by(|a, b| a.top().total_cmp(&b.top())).unwrap();
+    click(&mut h, dropdown.center());
+    let multiply = h.get_by_label("Multiply").rect().center();
+    h.hover_at(multiply);
+    h.run_steps(3);
+    assert_eq!(previewed(&mut h), Some(BlendMode::Multiply));
+    h.render().unwrap().save("blend-evidence/multiply-hover.png").unwrap();
+    h.hover_at(Pos2::new(400.0, 400.0));
+    h.run_steps(3);
+    assert_eq!(previewed(&mut h), None);
+    h.render().unwrap().save("blend-evidence/cancelled.png").unwrap();
+}
