@@ -227,3 +227,36 @@ fn dragging_on_the_first_anchor_closes_with_its_handles_in_one_step() {
     assert!(sp.closed && sp.knots.len() == 3);
     assert!(near([k.in_ctrl.x, k.in_ctrl.y], [0.0, 20.0]) && near([k.out_ctrl.x, k.out_ctrl.y], [40.0, 20.0]), "{k:?}");
 }
+// Fork-only rendered verification; keep out of the upstream contribution.
+#[test]
+#[ignore = "rendered evidence on the cloud verification runner"]
+fn pen_document_visual_evidence() {
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1100.0, 760.0)).with_max_steps(64).wgpu().build_eframe(|cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        if let Some(rs) = cc.wgpu_render_state.as_ref() {
+            app.set_wgpu(rs.clone());
+        }
+        app.run("file.new", json!({"width": 640, "height": 480, "background": "white"})).unwrap();
+        app.ui.tool = Tool::Pen;
+        app
+    });
+    h.run_steps(5);
+    for [x, y] in [[100.0, 100.0], [300.0, 120.0], [240.0, 300.0]] {
+        crate::vector_ui::pen_down(h.state_mut(), x, y);
+        crate::vector_ui::pen_up(h.state_mut());
+    }
+    h.run_steps(3);
+    let original = h.state().ui.pen.clone().unwrap();
+    let dir = std::env::var_os("PHOTOCRAFT_PEN_EVIDENCE_DIR").expect("evidence output directory");
+    std::fs::create_dir_all(&dir).unwrap();
+    h.render().expect("offscreen render").save(std::path::Path::new(&dir).join("original-draft.png")).unwrap();
+    h.state_mut().run("file.new", json!({"width": 480, "height": 320, "background": "white"})).unwrap();
+    h.run_steps(4);
+    assert!(h.state().ui.pen.is_none());
+    h.render().expect("offscreen render").save(std::path::Path::new(&dir).join("new-document.png")).unwrap();
+    h.state_mut().session.set_active(0);
+    h.run_steps(4);
+    assert_eq!(h.state().ui.pen.as_ref(), Some(&original));
+    h.render().expect("offscreen render").save(std::path::Path::new(&dir).join("restored-draft.png")).unwrap();
+}
