@@ -242,28 +242,29 @@ mod tests {
     #[ignore = "reports CPU preparation cost; run explicitly for profile-preview changes"]
     fn transform_profile_upload_cost() {
         let mut session = photocraft_engine::Session::new();
-        session.execute("file.new", serde_json::json!({"width": 1024, "height": 1024})).unwrap();
+        session.execute("file.new", serde_json::json!({"width": 6000, "height": 4000})).unwrap();
         let doc = session.active().unwrap().doc.clone();
-        for monitor in ["srgb", "display-p3"] {
-            session.color.settings.monitor_profile = monitor.into();
+        for monitor in ["raw", "srgb", "display-p3"] {
+            session.color.settings.monitor_profile = if monitor == "raw" { "srgb" } else { monitor }.into();
             let display = session.color.canvas_display(&doc).unwrap();
             let ctx = egui::Context::default();
-            let image = ColorImage::new([1024, 1024], vec![Color32::from_rgb(140, 89, 51); 1024 * 1024]);
+            let image = ColorImage::new([6000, 4000], vec![Color32::from_rgb(140, 89, 51); 6000 * 4000]);
+            let display = (monitor != "raw").then_some(&display);
             let started = std::time::Instant::now();
             let textures = PreviewTextures::new(&ctx, "profile-cost".into(), image, [1.0, 1.0]);
-            let texture = textures.pick_display(&ctx, 1.0, 1.0, false, Some(&display)).0;
+            let texture = textures.pick_display(&ctx, 1.0, 1.0, false, display).0;
             let prepare = started.elapsed();
             ctx.tex_manager().write().take_delta().clear();
             let started = std::time::Instant::now();
             for _ in 0..1000 {
-                assert_eq!(std::hint::black_box(textures.pick_display(&ctx, 1.0, 1.0, false, Some(&display))).0, texture);
+                assert_eq!(std::hint::black_box(textures.pick_display(&ctx, 1.0, 1.0, false, display)).0, texture);
             }
             let cached = started.elapsed();
             let mut delta = ctx.tex_manager().write().take_delta();
             assert!(delta.set.is_empty(), "cached dragging must not upload or reconvert pixels");
             delta.clear();
             eprintln!(
-                "profile={monitor}, pixels=1048576, first_prepare_ms={:.3}, cached_1000_us={:.3}; CPU preparation only, not GPU completion",
+                "profile={monitor}, pixels=24000000, first_prepare_ms={:.3}, cached_1000_us={:.3}; CPU preparation only, not GPU completion",
                 prepare.as_secs_f64() * 1000.0,
                 cached.as_secs_f64() * 1_000_000.0
             );
