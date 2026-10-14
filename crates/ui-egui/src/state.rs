@@ -1129,6 +1129,9 @@ pub struct UiState {
     /// Pen path under construction.
     #[serde(default)]
     pub pen: Option<crate::vector_ui::PenPath>,
+    /// Unfinished paths stay with their document while another tab is active.
+    #[serde(skip)]
+    pub(crate) pen_documents: crate::vector_ui::PenDocuments,
     #[serde(default)]
     pub stroke_editor: Option<crate::shape_stroke_ui::StrokeEditor>,
     /// Direct Selection tool: selected anchors and the drag in progress (#790).
@@ -1308,6 +1311,7 @@ impl Default for UiState {
             shell: Default::default(),
             layer_filter: Vec::new(),
             pen: None,
+            pen_documents: Default::default(),
             stroke_editor: None,
             direct_selection: Default::default(),
             selected_path: None,

@@ -323,6 +323,7 @@ pub fn clipboard_keys(ctx: &egui::Context, typing: bool, raw: &mut egui::RawInpu
 }
 
 pub fn handle(app: &mut PhotocraftApp, ctx: &egui::Context) {
+    crate::vector_ui::sync_pen_document(app);
     // A held tool letter released: a temporary tool gives the previous one back (#2672).
     crate::spring_tools::tick(app, ctx);
     // However the tool was picked (toolbar, flyout, shortcut, automation), its group's key brings
