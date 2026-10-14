@@ -1920,6 +1920,30 @@ mod tests {
     }
 
     #[test]
+    fn repeated_arrow_keys_keep_the_middle_numeric_field_focused() {
+        for (key, direction) in [(Key::ArrowUp, 1.0), (Key::ArrowDown, -1.0)] {
+            let mut h = Harness::new_ui_state(
+                |ui, state: &mut ([f32; 3], [egui::Id; 3])| {
+                    for index in 0..3 {
+                        state.1[index] = super::value_field(ui, &mut state.0[index], -1000.0..=1000.0, "", 100.0).id;
+                    }
+                },
+                ([100.0, 59.0, 200.0], [egui::Id::NULL; 3]),
+            );
+            h.run();
+            let target = h.state().1[1];
+            h.ctx.memory_mut(|m| m.request_focus(target));
+            h.run();
+            for index in 0..30 {
+                h.event(egui::Event::Key { key, physical_key: None, pressed: true, repeat: index > 0, modifiers: Modifiers::NONE });
+                h.run_steps(1);
+                assert!(h.ctx.memory(|m| m.has_focus(target)), "focus moved on repeat {index} for {key:?}");
+                assert_eq!(h.state().0, [100.0, 59.0 + direction * (index + 1) as f32, 200.0]);
+            }
+        }
+    }
+
+    #[test]
     fn arrow_keys_on_a_field_with_a_reversed_range_do_not_panic() {
         let mut h = focused(5.0, 10.0..=0.0);
         let _ = press(&mut h, Modifiers::NONE, Key::ArrowUp);
