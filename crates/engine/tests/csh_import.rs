@@ -63,6 +63,25 @@ fn csh_invalid_second_shape_does_not_partially_import_a_set() {
 }
 
 #[test]
+fn csh_multiple_shapes_with_matching_names_remain_individually_available() {
+    let triangle = triangle_csh();
+    let mut set = triangle.clone();
+    set[8..12].copy_from_slice(&2u32.to_be_bytes());
+    set.extend_from_slice(&triangle[12..]);
+    let mut s = Session::new();
+    let result = s.execute("shape.presets.importCsh", json!({"data": photocraft_paint::tile::b64_encode(&set), "group": "Pair"})).unwrap();
+    assert_eq!(result["count"], 2);
+    assert_eq!(result["names"], json!(["Triangle", "Triangle 2"]));
+    let group = s.presets.shapes.iter().find(|g| g.name == "Pair").unwrap();
+    assert_eq!(group.items.len(), 2);
+    assert_eq!(group.items[0].path, group.items[1].path);
+    s.execute("file.new", json!({"width": 32, "height": 32})).unwrap();
+    for name in ["Triangle", "Triangle 2"] {
+        s.execute("shape.presets.place", json!({"preset": name, "group": "Pair"})).unwrap();
+    }
+}
+
+#[test]
 fn csh_repeat_import_names_are_unique_and_survive_preferences_reload() {
     let mut session = Session::new();
     let params = json!({"data": photocraft_paint::tile::b64_encode(&triangle_csh()), "group": "Original CSH"});
