@@ -618,15 +618,18 @@ mod tests {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let holder = std::thread::spawn(move || {
-            let guard = winsafe::HWND::NULL.OpenClipboard().unwrap();
+            // A non-null window distinguishes this owner from arboard's null-window opens.
+            let guard = winsafe::HWND::GetDesktopWindow().OpenClipboard().unwrap();
             ready_tx.send(()).unwrap();
             release_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
             drop(guard);
         });
         ready_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+        let contention = arboard::Clipboard::new().unwrap().get_image().err();
         let first = app.run("edit.paste", json!({}));
         release_tx.send(()).unwrap();
         holder.join().unwrap();
+        assert!(matches!(contention, Some(arboard::Error::ClipboardOccupied)), "diagnostic must actually occupy the clipboard: {contention:?}");
         eprintln!("paste while clipboard occupied: {first:?}");
         assert!(
             app.session.clipboard.as_ref().is_some_and(|clip| clip.layers.is_some()),
