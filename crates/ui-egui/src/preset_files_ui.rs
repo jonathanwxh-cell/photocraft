@@ -14,7 +14,7 @@ use crate::PhotocraftApp;
 /// the Swatches panel through [`crate::swatches_ui::import_bytes`]).
 /// `.psp` is Photoshop's live `Keyboard Shortcuts.psp` (the same XML as a `.kys`); other `.psp`
 /// settings files are refused with a clear message.
-pub const PRESET_EXTS: &[&str] = &["abr", "grd", "pat", "aco", "ase", "kys", "psp"];
+pub const PRESET_EXTS: &[&str] = &["abr", "grd", "pat", "aco", "ase", "kys", "psp", "csh"];
 
 fn ext(name: &str) -> String {
     std::path::Path::new(name).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
@@ -52,12 +52,30 @@ fn source(name: &str, bytes: &[u8]) -> Value {
     json!({"data": photocraft_engine::paint::tile::b64_encode(bytes)})
 }
 
+/// Import a custom-shape set from the Shapes panel using the normal preset route.
+pub(crate) fn import_shapes_dialog(app: &mut PhotocraftApp) {
+    let result = app.pick_file_bytes_filtered(&["csh"], |app, name, bytes| {
+        if ext(&name) != "csh" {
+            return Err(tl!("Choose a custom shape file (.csh).").into());
+        }
+        open(app, &name, &bytes).ok_or_else(|| tl!("Choose a custom shape file (.csh).").to_string())??;
+        Ok(Value::Null)
+    });
+    if let Err(error) = result
+        && error != crate::file_dialog::CANCELLED
+    {
+        app.ui.status = error;
+        app.ui.status_error = true;
+    }
+}
+
 /// Import a preset file; `None` when `name` isn't one.
 pub fn open(app: &mut PhotocraftApp, name: &str, bytes: &[u8]) -> Option<Result<(), String>> {
     let (cmd, what) = match ext(name).as_str() {
         "abr" => ("brush.presets.importAbr", "brushes"),
         "grd" => ("gradient.presets.importGrd", "gradients"),
         "pat" => ("pattern.import", "patterns"),
+        "csh" => ("shape.presets.importCsh", "shapes"),
         "aco" | "ase" => return Some(crate::swatches_ui::import_bytes(app, name, bytes, false).map(|_| ())),
         "kys" | "psp" => return Some(crate::kys_import::open_bytes(app, name, bytes).map(|_| ())),
         _ => return None,
@@ -82,6 +100,7 @@ pub fn open(app: &mut PhotocraftApp, name: &str, bytes: &[u8]) -> Option<Result<
         let (one, other) = match what {
             "brushes" => ("Imported {n} brush from {file}", "Imported {n} brushes from {file}"),
             "patterns" => ("Imported {n} pattern from {file}", "Imported {n} patterns from {file}"),
+            "shapes" => ("Imported {n} shape from {file}", "Imported {n} shapes from {file}"),
             _ => ("Imported {n} gradient from {file}", "Imported {n} gradients from {file}"),
         };
         let imported = crate::i18n::fmt(&crate::i18n::trn(crate::i18n::current(), n, one, other), &[("file", &stem)]);
@@ -97,6 +116,9 @@ pub fn open(app: &mut PhotocraftApp, name: &str, bytes: &[u8]) -> Option<Result<
             app.ui.panels.brush_settings = true;
             app.ui.brush_tab = 1;
         }
+        if what == "shapes" {
+            app.ui.panels.shapes = true;
+        }
     }))
 }
 
@@ -111,6 +133,7 @@ mod tests {
         assert!(is_preset_file("Brand.ACO"));
         assert!(is_preset_file("exchange.ase"));
         assert!(is_preset_file("Debaser-ColourLibrary-Part6.PAT"));
+        assert!(is_preset_file("Original.CSH"));
         assert!(!is_preset_file("photo.psd"));
         assert!(!is_preset_file("abr"));
     }
