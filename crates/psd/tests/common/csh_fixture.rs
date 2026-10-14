@@ -11,7 +11,7 @@ pub fn polygon_csh(polygons: &[&[(f64, f64)]]) -> Vec<u8> {
     for unit in &name {
         out.extend_from_slice(&unit.to_be_bytes());
     }
-    if name.len() % 2 != 0 {
+    if !name.len().is_multiple_of(2) {
         out.extend_from_slice(&[0, 0]);
     }
     out.extend_from_slice(&1u32.to_be_bytes());
@@ -36,7 +36,7 @@ pub fn polygon_csh(polygons: &[&[(f64, f64)]]) -> Vec<u8> {
             }
         }
     }
-    while body.len() % 4 != 0 {
+    while !body.len().is_multiple_of(4) {
         body.push(0);
     }
     out.extend_from_slice(&(body.len() as u32).to_be_bytes());

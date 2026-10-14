@@ -11,7 +11,7 @@ fn fixture(names: &[&str]) -> Vec<u8> {
         for unit in units {
             bytes.extend_from_slice(&unit.to_be_bytes());
         }
-        while bytes.len() % 4 != 0 {
+        while !bytes.len().is_multiple_of(4) {
             bytes.push(0);
         }
         bytes.extend_from_slice(&1u32.to_be_bytes());
@@ -22,7 +22,7 @@ fn fixture(names: &[&str]) -> Vec<u8> {
         let knot = PsdKnot { linked: true, pre: (0.125, 0.25), anchor: (0.5, 0.5), post: (0.75, 0.875) };
         let path = PathData::from_subpaths(&[PsdSubpath { closed: false, operation: 0, knots: vec![knot] }], false);
         body.extend_from_slice(&path.to_bytes());
-        while body.len() % 4 != 0 {
+        while !body.len().is_multiple_of(4) {
             body.push(0);
         }
         bytes.extend_from_slice(&(body.len() as u32).to_be_bytes());
