@@ -249,7 +249,7 @@ mod tests {
             let display = session.color.canvas_display(&doc).unwrap();
             let ctx = egui::Context::default();
             let image = ColorImage::new([6000, 4000], vec![Color32::from_rgb(140, 89, 51); 6000 * 4000]);
-            let display = (monitor != "raw").then_some(&display);
+            let display = (monitor != "raw").then_some(display.as_ref());
             let started = std::time::Instant::now();
             let textures = PreviewTextures::new(&ctx, "profile-cost".into(), image, [1.0, 1.0]);
             let texture = textures.pick_display(&ctx, 1.0, 1.0, false, display).0;
