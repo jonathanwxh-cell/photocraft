@@ -139,14 +139,21 @@ impl PreviewTextures {
 /// Bound the temporary float buffer independently of the texture size.
 fn display_image(image: &ColorImage, display: &CanvasDisplay) -> ColorImage {
     let mut out = image.clone();
-    for pixels in out.pixels.chunks_mut(4096) {
+    let convert = |pixels: &mut [Color32]| {
         let px = pixels.iter().map(|p| p.to_srgba_unmultiplied().map(|c| f32::from(c) / 255.0)).collect();
         let buffer = photocraft_compose::Buffer { rect: photocraft_geom::Rect::new(0, 0, pixels.len() as i32, 1), px };
         let converted = display.to_rgba8(&buffer);
         for (p, rgba) in pixels.iter_mut().zip(converted.pixels.as_chunks::<4>().0) {
             *p = Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
         }
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use rayon::prelude::*;
+        out.pixels.par_chunks_mut(4096).for_each(convert);
     }
+    #[cfg(target_arch = "wasm32")]
+    out.pixels.chunks_mut(4096).for_each(convert);
     out
 }
 
