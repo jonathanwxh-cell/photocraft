@@ -150,6 +150,26 @@ fn unfinished_pen_path_tracks_document_identity_when_another_document_closes() {
 }
 
 #[test]
+fn unfinished_pen_path_commit_after_a_document_change_cannot_write_to_the_new_document() {
+    for tool in [Tool::Pen, Tool::CurvaturePen] {
+        let mut h = harness();
+        h.state_mut().ui.tool = tool;
+        click(&mut h, [20.0, 20.0]);
+        click(&mut h, [100.0, 60.0]);
+        let draft = h.state().ui.pen.clone().unwrap();
+        // A direct session change can precede the next frame's sync_views call.
+        h.state_mut().session.execute("file.new", json!({"width": 320, "height": 240})).unwrap();
+        crate::vector_ui::pen_commit(h.state_mut(), false);
+        assert!(h.state().ui.pen.is_none());
+        assert!(h.state().session.documents().iter().all(|st| st.doc.work_path.is_none()));
+
+        h.state_mut().session.set_active(0);
+        h.state_mut().sync_views();
+        assert_eq!(h.state().ui.pen.as_ref(), Some(&draft), "a foreign commit must preserve the original {tool:?} draft");
+    }
+}
+
+#[test]
 fn alt_breaks_the_handle_being_dragged_and_grabs_the_last_outgoing_handle() {
     let mut h = harness();
     click(&mut h, [20.0, 20.0]);
