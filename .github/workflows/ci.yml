@@ -31,7 +31,7 @@ jobs:
         run: cargo clippy -p photocraft-ui-egui --all-targets --locked -- -D warnings
       - name: Render transform profile evidence
         env:
-          PHOTOCRAFT_TRANSFORM_EVIDENCE: transform-profile-evidence
+          PHOTOCRAFT_TRANSFORM_EVIDENCE: ${{ github.workspace }}/transform-profile-evidence
           XDG_RUNTIME_DIR: /tmp
         run: cargo test -p photocraft-ui-egui --lib --locked transform_profile_visual_evidence -- --ignored --nocapture
       - uses: actions/upload-artifact@v4
@@ -41,3 +41,13 @@ jobs:
           path: transform-profile-evidence/*.png
           if-no-files-found: warn
           retention-days: 3
+      - name: Profile upload preparation cost
+        run: cargo test -p photocraft-ui-egui --lib --locked transform_profile_upload_cost -- --ignored --nocapture
+      - name: Full UI tests
+        run: cargo test -p photocraft-ui-egui --locked
+      - name: Layers
+        run: cargo xtask layers
+      - name: WASM
+        run: cargo xtask wasm
+      - name: Quick UI performance
+        run: cargo xtask perf --quick --bench layout_bench
