@@ -18,8 +18,7 @@ what an agent can't finish alone.
 ## Summary
 
 | # | Gap | Kind | Impact | Estimate | Parity doc |
-|---|---|---|
-| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |---|---:|---|
+|---|---|---|---|---:|---|
 | G1 | PSD fidelity and Photoshop acceptance | file format | blocks beta | 150–250 h | [file-format-parity](file-format-parity.md) |
 | G2 | Interactive performance | performance | blocks beta | 200–350 h | [scorecard](scorecard.md#performance) |
 | G3 | User-reported bug backlog | stability, UI | blocks beta | 250–400 h | [target-app-parity](target-app-parity.md) |

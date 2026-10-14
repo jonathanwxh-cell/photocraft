@@ -20,8 +20,7 @@ XL are missing (gap G10). Remaining: 300–500 h including PSD fidelity.
 ## Photoshop's formats
 
 | Format | Photoshop | PhotoCraft read | PhotoCraft write | Fidelity and tests |
-|---|---|---|
-| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |---|---|
+|---|---|---|---|---|
 | PSD | R/W | yes | yes | 1/8/16/32-bit; Bitmap, Gray, Indexed, RGB, CMYK, Multichannel, Lab, Duotone; layers, groups, masks, vector masks, adjustment and fill layers, effects, text, shapes, smart objects (SoLd/lnk2; CS2 PlLd/lnkD read with their warp, kept as is or re-saved as SoLd once edited), smart filters (14 mapped, rest verbatim), slices, comps, Advanced Blending. Oracle floors: Photoshop-authored 145/258, io 146/170, psd-tools 236/309; round trip ≥ 169/170, 308/309, 258/256. Known failures: #1281, #2469 (#2374, text layers, closed 2026-10-10; #2465, CS2 `PlLd`-only smart objects, fixed 2026-10-12) |
 | PSB | R/W | yes | yes | Auto-switches above 2 GB (REL-212-2); 4–5 GB fixtures generated (FILE-216-2); > 4 GB fails on Windows (#375) |
 | Cloud PSD (.psdc) | R/W | no | no | Out of scope (Adobe cloud) |
@@ -85,8 +84,7 @@ D5100 colour profile. Counts and the G14 estimate are unchanged.
 ## Formats Photoshop doesn't have (ours only)
 
 | Format | Read | Write | Notes |
-|---|---|---|
-| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |---|
+|---|---|---|---|
 | `.pcraft` (native) | yes | yes | Incremental, autosave, crash recovery, atomic save |
 | Affinity `.af`, `.afphoto`, `.afdesign`, `.afpub` | yes | no | See below |
 | Paint.NET `.pdn` | yes | no | [pdn.md](pdn.md) |
@@ -125,8 +123,7 @@ remaining gaps in #1606 stay tracked with per-sample corpus ceilings.
 ## Presets and data files
 
 | Format | Photoshop | PhotoCraft | Notes |
-|---|---|---|
-| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |---|
+|---|---|---|---|
 | Brushes `.abr` | R/W | R/W | `psd/src/abr.rs` (v6/v12) |
 | Gradients `.grd` | R/W | R/W | |
 | Patterns `.pat` | R/W | R/W | |
