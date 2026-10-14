@@ -46,6 +46,23 @@ fn csh_failed_import_preserves_existing_presets_and_revision() {
 }
 
 #[test]
+fn csh_invalid_second_shape_does_not_partially_import_a_set() {
+    let triangle = triangle_csh();
+    let mut set = triangle.clone();
+    set[8..12].copy_from_slice(&2u32.to_be_bytes());
+    set.extend_from_slice(&triangle[12..]);
+    // The first shape is complete; truncate the second shape's path/padding.
+    set.pop();
+    let mut session = Session::new();
+    session.execute("shape.presets.importCsh", json!({"data": photocraft_paint::tile::b64_encode(&triangle)})).unwrap();
+    let before = session.presets.to_json(&session);
+    let revision = session.presets.rev;
+    assert!(session.execute("shape.presets.importCsh", json!({"data": photocraft_paint::tile::b64_encode(&set)})).is_err());
+    assert_eq!(session.presets.to_json(&session), before);
+    assert_eq!(session.presets.rev, revision);
+}
+
+#[test]
 fn csh_repeat_import_names_are_unique_and_survive_preferences_reload() {
     let mut session = Session::new();
     let params = json!({"data": photocraft_paint::tile::b64_encode(&triangle_csh()), "group": "Original CSH"});

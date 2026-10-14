@@ -117,7 +117,7 @@ pub fn open(app: &mut PhotocraftApp, name: &str, bytes: &[u8]) -> Option<Result<
             app.ui.brush_tab = 1;
         }
         if what == "shapes" {
-            app.ui.panels.shapes = true;
+            app.ui.presets_ui.shapes = true;
         }
     }))
 }
@@ -148,7 +148,7 @@ mod tests {
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
         open(&mut app, "Original.CSH", &csh_fixture::triangle_csh()).unwrap().unwrap();
         assert!(app.session.active().is_none());
-        assert!(app.ui.panels.shapes);
+        assert!(app.ui.presets_ui.shapes);
         assert!(!app.ui.status_error);
         let imported = app.session.presets.shapes.iter().find(|g| g.name == "Original").unwrap();
         assert_eq!(imported.items.len(), 1);
@@ -178,7 +178,7 @@ mod tests {
             app.run("file.new", json!({"width": 400, "height": 300, "background": "transparent"})).unwrap();
             // A user-cleared library makes the one imported fixture visible without scrolling.
             app.session.presets.shapes.clear();
-            app.ui.panels.shapes = true;
+            app.ui.presets_ui.shapes = true;
             app
         });
         h.run_steps(8);
