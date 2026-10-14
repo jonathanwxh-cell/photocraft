@@ -8023,9 +8023,26 @@ mod blend_viewport_regression {
         let visible = DRect::new(256, 256, 512, 512);
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         assert!(app.redraws.is_empty(), "small fixture must finish synchronously");
+        let id = app.session.active().unwrap().doc.id;
+        let gpu = app.gpu.clone().unwrap();
+        let original = gpu.read_texels(id.0).unwrap();
         crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), Some(BlendMode::Multiply));
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         println!("BLEND_VIEWPORT kind={} pixels={} expected={} adapter={:?}", app.perf.last_refresh, app.perf.last_refresh_px, 256 * 256, app.perf.gpu_info);
         assert_eq!(app.perf.last_refresh_px, 256 * 256, "hover must not recomposite offscreen pixels of a full-canvas layer");
+        app.perf.last_refresh_px = 0;
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        assert_eq!(app.perf.last_refresh_px, 0, "unchanged view and mode must reuse the texture");
+        let panned = DRect::new(512, 256, 768, 512);
+        assert!(ensure_gpu(&mut app, &ctx, 0, panned));
+        assert_eq!(app.perf.last_refresh_px, 256 * 256, "newly exposed pixels must catch up without a mode change");
+        crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), Some(BlendMode::Screen));
+        assert!(ensure_gpu(&mut app, &ctx, 0, panned));
+        assert_eq!(app.perf.last_refresh_px, 256 * 256);
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        assert_eq!(app.perf.last_refresh_px, 256 * 256, "returning view must show the current mode");
+        crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), None);
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        assert_eq!(gpu.read_texels(id.0).unwrap(), original, "cancel must restore the whole texture, including previously previewed offscreen pixels");
     }
 }
