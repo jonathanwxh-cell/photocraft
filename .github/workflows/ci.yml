@@ -66,7 +66,7 @@ jobs:
         if: runner.os == 'Linux'
         continue-on-error: true
         env:
-          PHOTOCRAFT_CLIPBOARD_EVIDENCE: clipboard-evidence
+          PHOTOCRAFT_CLIPBOARD_EVIDENCE: ${{ github.workspace }}/clipboard-evidence
         run: cargo test -p photocraft-ui-egui --lib --locked clipboard_error_and_retry_visual_evidence -- --ignored --nocapture
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Linux'
