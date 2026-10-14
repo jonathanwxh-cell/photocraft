@@ -341,7 +341,8 @@ pub type OpenUrlFn = Box<dyn Fn(&str) -> Result<(), String>>;
 pub type EncodePngFn = Box<dyn Fn(u32, u32, &[u8]) -> Result<Vec<u8>, String>>;
 /// Put an RGBA8 image (width, height, pixels) on the OS clipboard.
 pub type ClipboardSetFn = Box<dyn FnMut(u32, u32, &[u8]) -> Result<(), String>>;
-/// Read an RGBA8 image from the OS clipboard.
+/// Read an RGBA8 image from the OS clipboard. `Ok(None)` means no image is available;
+/// `Err` means the contents could not be read and must not invalidate the internal copy.
 pub type ClipboardGetFn = Box<dyn FnMut() -> Result<Option<(u32, u32, Vec<u8>)>, String>>;
 /// Shared queue of (file name, bytes) delivered asynchronously.
 pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
@@ -2457,7 +2458,7 @@ impl PhotocraftApp {
 
     /// If the OS clipboard holds an image that isn't the one we put there, make it the session
     /// clipboard (so ⌘V pastes screenshots and images copied in other apps, like Photoshop).
-    /// Returns true when a new external image was imported. Once the OS clipboard no longer holds
+    /// Returns `Ok(true)` when a new external image was imported. Once the OS clipboard no longer holds
     /// the image we mirrored or imported (text or a file was copied since), that image is stale:
     /// it is dropped rather than pasted.
     pub(crate) fn import_os_clipboard(&mut self) -> Result<bool, String> {
@@ -2670,6 +2671,46 @@ mod clipboard_tests {
     }
 
     type OsClip = Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>;
+
+    #[test]
+    #[ignore = "renders clipboard error and retry evidence with a GPU adapter"]
+    fn clipboard_error_and_retry_visual_evidence() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let busy = Arc::new(AtomicBool::new(true));
+        let unavailable = busy.clone();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).with_max_steps(64).wgpu().build_eframe(move |cc| {
+            PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+            let services = Services {
+                clipboard_get_image: Some(Box::new(move || {
+                    if unavailable.load(Ordering::SeqCst) {
+                        Err("The native clipboard is not accessible due to being held by another party.".into())
+                    } else {
+                        Ok(None)
+                    }
+                })),
+                ..Default::default()
+            };
+            let mut app = PhotocraftApp::new(Session::new(), services);
+            app.run("file.new", serde_json::json!({"width": 400, "height": 300, "background": "white"})).unwrap();
+            app.run("shape.create", serde_json::json!({"kind": "rect", "rect": [80, 60, 200, 120], "fill": "#3070c0"})).unwrap();
+            app.run("edit.copy", serde_json::json!({})).unwrap();
+            app.run("file.new", serde_json::json!({"width": 400, "height": 300, "background": "white"})).unwrap();
+            app
+        });
+        let out = std::path::PathBuf::from(std::env::var_os("PHOTOCRAFT_CLIPBOARD_EVIDENCE").expect("evidence directory"));
+        std::fs::create_dir_all(&out).unwrap();
+        h.run_steps(8);
+        let ctx = h.ctx.clone();
+        assert!(crate::menus::invoke(h.state_mut(), &ctx, "edit.paste", serde_json::json!({})).is_err());
+        h.run_steps(2);
+        assert!(h.state().ui.status_error);
+        h.render().unwrap().save(out.join("clipboard-busy.png")).unwrap();
+        busy.store(false, Ordering::SeqCst);
+        crate::menus::invoke(h.state_mut(), &ctx, "edit.paste", serde_json::json!({})).unwrap();
+        h.run_steps(3);
+        assert!(!h.state().ui.status_error);
+        h.render().unwrap().save(out.join("clipboard-retry.png")).unwrap();
+    }
 
     #[test]
     fn failed_clipboard_reads_preserve_editable_contents_until_retry() {

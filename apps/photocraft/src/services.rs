@@ -609,7 +609,7 @@ mod tests {
     use photocraft_ui_egui::{PhotocraftApp, prefs_ui};
     use serde_json::{Value, json};
 
-    /// Diagnostic only: uses the real clipboard on an isolated Windows CI runner.
+    /// Regression using the real clipboard on an isolated Windows CI runner.
     #[cfg(target_os = "windows")]
     #[test]
     #[ignore = "requires exclusive use of the Windows clipboard"]
