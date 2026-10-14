@@ -143,7 +143,7 @@ fn display_image(image: &ColorImage, display: &CanvasDisplay) -> ColorImage {
         let px = pixels.iter().map(|p| p.to_srgba_unmultiplied().map(|c| f32::from(c) / 255.0)).collect();
         let buffer = photocraft_compose::Buffer { rect: photocraft_geom::Rect::new(0, 0, pixels.len() as i32, 1), px };
         let converted = display.to_rgba8(&buffer);
-        for (p, rgba) in pixels.iter_mut().zip(converted.pixels.chunks_exact(4)) {
+        for (p, rgba) in pixels.iter_mut().zip(converted.pixels.as_chunks::<4>().0) {
             *p = Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
         }
     }
