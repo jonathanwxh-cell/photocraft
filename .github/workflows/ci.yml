@@ -22,5 +22,6 @@ jobs:
         with:
           key: menu-place-focused
           cache-on-failure: true
-      - name: Reproduce unfinished Pen path crossing documents
-        run: cargo test -p photocraft-ui-egui --lib --locked unfinished_pen_path_does_not_follow_a_new_document -- --nocapture
+      - name: Verify Pen document isolation and vector regressions
+        run: cargo test -p photocraft-ui-egui --lib --locked vector_ui:: -- --nocapture
+
