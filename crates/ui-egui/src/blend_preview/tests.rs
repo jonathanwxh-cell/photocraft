@@ -124,3 +124,45 @@ fn moving_between_modes_keeps_a_preview_across_the_gaps_between_them() {
     }
     assert_eq!(previewed(&mut h), Some(BlendMode::Multiply));
 }
+
+/// Investigation only: preparation cost, not canvas/GPU composition or end-to-end latency.
+#[test]
+#[ignore]
+fn blend_hover_preparation_measurement() {
+    use std::hint::black_box;
+    use std::time::Instant;
+    for layer_count in [1, 8] {
+        let mut s = photocraft_engine::Session::new();
+        s.execute("file.new", json!({"width":6000,"height":4000})).unwrap();
+        let mut top = LayerId(0);
+        for i in 0..layer_count {
+            top = LayerId(s.execute("layer.new.layer", json!({"name":format!("filled {i}")})).unwrap()["layer"].as_u64().unwrap());
+            s.execute("edit.fill", json!({"color":"#cc3366"})).unwrap();
+        }
+        let mut app = PhotocraftApp::new(s, crate::Services::default());
+        for case in ["current", "cached", "alternating"] {
+            hover(&mut app, top, Some(BlendMode::Multiply));
+            black_box(display_doc(&mut app, 0));
+            for sample in 0..5 {
+                let start = Instant::now();
+                for i in 0..100 {
+                    app.frame += 1;
+                    let mode = match case {
+                        "current" => BlendMode::Normal,
+                        "cached" => BlendMode::Multiply,
+                        _ if i % 2 == 0 => BlendMode::Multiply,
+                        _ => BlendMode::Screen,
+                    };
+                    hover(&mut app, top, Some(mode));
+                    let shown = display_doc(&mut app, 0);
+                    assert_eq!(shown.is_some(), mode != BlendMode::Normal);
+                    black_box(shown);
+                }
+                println!(
+                    "BLEND_PREP layers={layer_count} pixels=24000000 case={case} sample={sample} iterations=100 elapsed_us={}",
+                    start.elapsed().as_micros()
+                );
+            }
+        }
+    }
+}
