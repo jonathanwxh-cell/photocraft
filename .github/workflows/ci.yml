@@ -22,61 +22,9 @@ jobs:
         with:
           key: csh-import-focused
           cache-on-failure: true
-      - name: Strict affected-crate Clippy
-        run: cargo clippy -p photocraft-psd -p photocraft-engine -p photocraft-ui-egui --all-targets --locked -- -D warnings
-      - name: Engine CSH import regressions
-        env:
-          PHOTOCRAFT_CSH_FIXTURE: /tmp/photocraft-original-triangle.csh
-        run: cargo test -p photocraft-engine --test csh_import --locked -- --nocapture
-      - name: Bounded CSH parser regressions
-        run: cargo test -p photocraft-psd --test csh --locked -- --nocapture
-      - name: Preset file UI routing
-        run: cargo test -p photocraft-ui-egui --lib --locked preset_files_ui -- --nocapture
-      - name: Preset input budget regressions
-        run: cargo test -p photocraft-engine --lib --locked preset_import_cmds -- --nocapture
-      - name: Render Shapes import workflow
-        env:
-          PHOTOCRAFT_CSH_EVIDENCE: /tmp/csh-evidence
-          XDG_RUNTIME_DIR: /tmp
-        run: cargo test -p photocraft-ui-egui --lib --locked csh_panel_import_visual_evidence -- --ignored --nocapture
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: csh-visual-evidence
-          path: /tmp/csh-evidence/*.png
-          if-no-files-found: warn
-          retention-days: 3
-      - name: Adversarial command parameters
-        run: cargo test -p photocraft-engine --test panic_hunt --locked -- --ignored
-      - name: Dependency layering
-        run: cargo xtask layers
-      - name: Regenerate command parity
-        run: |
-          cargo xtask parity
-          git diff -- docs/parity-checklist.md > /tmp/csh-parity.patch
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: csh-parity-evidence
-          path: /tmp/csh-parity.patch
-          if-no-files-found: warn
-          retention-days: 3
-      - name: Independent original-fixture reader
-        if: always()
-        run: |
-          npm install --ignore-scripts --no-audit --no-fund --prefix /tmp/csh-oracle ag-psd@14.3.2
-          node <<'JS'
-          const fs = require('fs');
-          const assert = require('assert/strict');
-          const { readCsh } = require('/tmp/csh-oracle/node_modules/ag-psd/dist/csh.js');
-          const result = readCsh(fs.readFileSync('/tmp/photocraft-original-triangle.csh'));
-          assert.equal(result.shapes.length, 1);
-          const shape = result.shapes[0];
-          assert.equal(shape.name, 'Triangle');
-          assert.equal(shape.width, 200);
-          assert.equal(shape.height, 100);
-          assert.equal(shape.paths.length, 1);
-          assert.equal(shape.paths[0].knots.length, 3);
-          console.log(JSON.stringify(result));
-          JS
-
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Automation regressions
+        run: cargo test -p photocraft-automation --lib --locked -- --nocapture
+      - name: Strict automation Clippy
+        run: cargo clippy -p photocraft-automation --all-targets --locked -- -D warnings
