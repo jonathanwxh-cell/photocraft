@@ -27,4 +27,3 @@ jobs:
           XDG_RUNTIME_DIR: /tmp
         run: |
           cargo test -p photocraft-ui-egui --lib --locked blend_ -- --nocapture --test-threads=1
-

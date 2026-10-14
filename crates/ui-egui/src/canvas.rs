@@ -8028,6 +8028,24 @@ mod blend_viewport_regression {
         check_blend_viewport(true);
     }
 
+    fn assert_visible_pixels(app: &mut PhotocraftApp, visible: DRect) {
+        let (doc, _) = display_doc(app, 0);
+        let gpu = app.gpu.clone().unwrap();
+        let reference = doc.id.0 ^ (1u64 << 60);
+        let (display, _) = canvas_display(app, &doc, None);
+        gpu.upload_composite(reference, &doc, display.as_deref());
+        let (_, size, shown) = gpu.read_texels(doc.id.0).unwrap();
+        let (_, _, want) = gpu.read_texels(reference).unwrap();
+        for y in visible.y0..visible.y1 {
+            for x in visible.x0..visible.x1 {
+                let index = y as usize * size[0] as usize + x as usize;
+                for channel in 0..4 {
+                    assert!((shown[index][channel] - want[index][channel]).abs() <= 2.0 / 255.0, "preview differs at ({x},{y}) channel{channel}");
+                }
+            }
+        }
+    }
+
     fn check_blend_viewport(cpu_fallback: bool) {
         let _guard = photocraft_testkit::gpu_lock();
         // This verification run requires an adapter: a skipped test is not reproduction.
@@ -8054,6 +8072,7 @@ mod blend_viewport_regression {
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         println!("BLEND_VIEWPORT kind={} pixels={} expected={} adapter={:?}", app.perf.last_refresh, app.perf.last_refresh_px, 256 * 256, app.perf.gpu_info);
         assert_eq!(app.perf.last_refresh_px, 256 * 256, "hover must not recomposite offscreen pixels of a full-canvas layer");
+        assert_visible_pixels(&mut app, visible);
         app.perf.last_refresh_px = 0;
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         assert_eq!(app.perf.last_refresh_px, 0, "unchanged view and mode must reuse the texture");
@@ -8068,8 +8087,22 @@ mod blend_viewport_regression {
         assert_eq!(app.perf.last_refresh_px, 256 * 256);
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         assert_eq!(app.perf.last_refresh_px, 256 * 256, "returning view must show the current mode");
+        assert_visible_pixels(&mut app, visible);
+        assert_visible_pixels(&mut app, panned);
         crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), None);
         assert!(ensure_gpu(&mut app, &ctx, 0, visible));
         assert_eq!(gpu.read_texels(id.0).unwrap(), original, "cancel must restore the whole texture, including previously previewed offscreen pixels");
+        crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), Some(BlendMode::Multiply));
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        app.run("layer.setProps", json!({"layer":layer,"blend":"Multiply"})).unwrap();
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        let bounds = app.session.active().unwrap().doc.bounds();
+        assert_visible_pixels(&mut app, bounds);
+        app.run("file.new", json!({"width":1024,"height":768,"background":"white"})).unwrap();
+        assert!(ensure_gpu(&mut app, &ctx, 1, visible));
+        app.session.set_active(0);
+        app.sync_views();
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        assert_visible_pixels(&mut app, bounds);
     }
 }
