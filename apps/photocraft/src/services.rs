@@ -597,6 +597,43 @@ mod tests {
     use photocraft_ui_egui::{PhotocraftApp, prefs_ui};
     use serde_json::{Value, json};
 
+    /// Diagnostic only: uses the real clipboard on an isolated Windows CI runner.
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "requires exclusive use of the Windows clipboard"]
+    fn busy_native_clipboard_preserves_copied_shape() {
+        use winsafe::prelude::*;
+        let mut native = native(None);
+        let services =
+            Services { clipboard_set_image: native.clipboard_set_image.take(), clipboard_get_image: native.clipboard_get_image.take(), ..Default::default() };
+        let mut app = PhotocraftApp::new(Session::new(), services);
+        app.run("file.new", json!({"width": 80, "height": 60})).unwrap();
+        app.run("shape.create", json!({"kind": "rect", "rect": [10, 10, 40, 20], "fill": "#ff0000"})).unwrap();
+        app.run("edit.copy", json!({})).unwrap();
+        assert!(app.session.clipboard.as_ref().unwrap().layers.is_some());
+        assert!(app.services.clipboard_get_image.as_mut().unwrap()().is_some(), "native export succeeded");
+        app.run("file.new", json!({"width": 80, "height": 60})).unwrap();
+
+        // Another thread holds the OS clipboard open beyond arboard's bounded retry window.
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let guard = winsafe::HWND::NULL.OpenClipboard().unwrap();
+            ready_tx.send(()).unwrap();
+            release_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+            drop(guard);
+        });
+        ready_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+        let first = app.run("edit.paste", json!({}));
+        release_tx.send(()).unwrap();
+        holder.join().unwrap();
+        eprintln!("paste while clipboard occupied: {first:?}");
+        assert!(
+            app.session.clipboard.as_ref().is_some_and(|clip| clip.layers.is_some()),
+            "a temporary OS read failure must not discard the copied editable shape"
+        );
+    }
+
     #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn open_filters_cover_uppercase_and_mixed_case_extensions() {
