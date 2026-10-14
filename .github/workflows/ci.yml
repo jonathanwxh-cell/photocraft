@@ -1,4 +1,4 @@
-name: Menu placement baseline
+name: Menu placement focused verification
 on:
   workflow_dispatch:
 permissions:
@@ -17,10 +17,21 @@ jobs:
       - name: Linux UI dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev libvulkan1 mesa-vulkan-drivers
       - uses: Swatinem/rust-cache@v2
         with:
           key: menu-place-focused
           cache-on-failure: true
-      - name: Reproduce menu placement without a production fix
-        run: cargo test -p photocraft-ui-egui --lib --locked menu_place_starts_transform_for_each_chosen_image -- --nocapture
+      - name: Menu placement regressions
+        run: cargo test -p photocraft-ui-egui --lib --locked menu_place -- --nocapture
+      - name: Render menu placement
+        env:
+          PHOTOCRAFT_PLACE_EVIDENCE_DIR: evidence
+          XDG_RUNTIME_DIR: /tmp
+        run: cargo test -p photocraft-ui-egui --lib --locked menu_place_visual_evidence -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: menu-placement-evidence
+          path: crates/ui-egui/evidence/*.png
+          if-no-files-found: warn

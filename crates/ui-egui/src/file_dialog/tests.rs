@@ -3,6 +3,35 @@ use crate::{Services, menus};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+// Fork-only visual verification probe; not part of the proposed upstream change.
+#[test]
+#[ignore = "rendered evidence on the cloud verification runner"]
+fn menu_place_visual_evidence() {
+    let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1100.0, 760.0)).with_max_steps(64).wgpu().build_eframe(|cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        if let Some(rs) = cc.wgpu_render_state.as_ref() {
+            app.set_wgpu(rs.clone());
+        }
+        app.run("file.new", json!({"width": 160, "height": 100})).unwrap();
+        app.run("edit.fill", json!({"color": "#c74636"})).unwrap();
+        let bytes = photocraft_io::export(&app.session.active().unwrap().doc, "panel.png", &Default::default()).unwrap().bytes;
+        app.run("file.new", json!({"width": 640, "height": 480, "background": "white"})).unwrap();
+        app.services.file_dialog = Some(Box::new(move |_, _, reply| {
+            reply.send(Some(FileDialogAnswer::Contents("panel.png".into(), bytes.clone())));
+        }));
+        app
+    });
+    harness.run_steps(4);
+    let ctx = harness.ctx.clone();
+    menus::invoke(harness.state_mut(), &ctx, "file.placeEmbedded", json!({})).unwrap();
+    harness.run_steps(5);
+    assert!(harness.state().ui.transform.is_some());
+    let dir = std::env::var_os("PHOTOCRAFT_PLACE_EVIDENCE_DIR").expect("evidence output directory");
+    std::fs::create_dir_all(&dir).unwrap();
+    harness.render().expect("offscreen render").save(std::path::Path::new(&dir).join("menu-place-transform.png")).unwrap();
+}
+
 /// The requests the fake dialog service was given, with their replies: dialogs the user is still in.
 type Open = Rc<RefCell<Vec<(FileDialogRequest, FileDialogReply)>>>;
 
