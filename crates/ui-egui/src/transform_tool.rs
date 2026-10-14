@@ -4759,8 +4759,28 @@ mod tests {
             assert_eq!(!display.is_identity(), wide_gamut);
             let composite = photocraft_compose::render(&st.doc, bounds);
             let expected = crate::canvas::display_image(Some(&display), &composite);
-            let (preview, _) = preview_image(&st.doc, st.active_layer.unwrap(), None, bounds, 4096, false);
-            assert_eq!(preview.pixels[0], expected.pixels[0], "transform changed displayed color; wide_gamut={wide_gamut}");
+            let ctx = gpu_ctx();
+            begin(&mut app, &ctx).unwrap();
+            let xf = ViewXform {
+                rect: egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(80.0, 80.0)),
+                zoom: 1.0,
+                center: [4.0, 4.0],
+                flip: false,
+                rotation: 0.0,
+                aspect: 1.0,
+            };
+            let mut out = ctx.run_ui(egui::RawInput { max_texture_side: Some(16384), ..Default::default() }, |ui| {
+                draw_overlay(&app, &ui.ctx().layer_painter(egui::LayerId::background()), &xf);
+            });
+            let texture = out.shapes.iter().find_map(|s| match &s.shape {
+                egui::Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => Some(mesh.texture_id),
+                _ => None,
+            }).expect("transform draws a textured mesh");
+            let upload = out.textures_delta.set.get(&texture).and_then(|updates| updates.last()).expect("drawn texture was uploaded");
+            let egui::ImageData::Color(image) = &upload.image;
+            let shown = image.pixels[0];
+            out.textures_delta.clear();
+            assert_eq!(shown, expected.pixels[0], "transform changed displayed color; wide_gamut={wide_gamut}");
         }
     }
 
