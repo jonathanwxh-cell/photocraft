@@ -25,6 +25,6 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Localization regressions
-        run: cargo test -p photocraft-ui-egui --lib --locked i18n:: -- --nocapture
+        run: cargo test -p photocraft-ui-egui --lib --locked i18n -- --nocapture
       - name: Strict UI Clippy
         run: cargo clippy -p photocraft-ui-egui --all-targets --locked -- -D warnings
