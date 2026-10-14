@@ -8028,6 +8028,45 @@ mod blend_viewport_regression {
         check_blend_viewport(true);
     }
 
+    #[test]
+    fn blend_hover_during_background_redraw_restores_committed_pixels() {
+        let _guard = photocraft_testkit::gpu_lock();
+        let rs = egui_kittest::wgpu::create_render_state(crate::gpu_canvas::wgpu_setup(), Default::default());
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.set_wgpu(rs);
+        app.background_jobs = true;
+        app.run("file.new", json!({"width":2600,"height":1700,"background":"#336699"})).unwrap();
+        let layer = app.run("layer.new.layer", json!({})).unwrap()["layer"].as_u64().unwrap();
+        app.run("edit.fill", json!({"color":"#cc8844"})).unwrap();
+        app.run("layer.layerStyle.blendingOptions", json!({"knockout":"shallow"})).unwrap();
+        let ctx = egui::Context::default();
+        let visible = DRect::new(256, 256, 512, 512);
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        assert!(!app.redraws.is_empty(), "fixture must start a deferred full redraw");
+        crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), Some(BlendMode::Multiply));
+        assert!(ensure_gpu(&mut app, &ctx, 0, visible));
+        let panned = DRect::new(2048, 1024, 2304, 1280);
+        assert!(ensure_gpu(&mut app, &ctx, 0, panned));
+        settle_redraw(&mut app);
+        assert_visible_pixels(&mut app, panned);
+        crate::blend_preview::hover(&mut app, photocraft_doc::LayerId(layer), None);
+        assert!(ensure_gpu(&mut app, &ctx, 0, panned));
+        settle_redraw(&mut app);
+        let bounds = app.session.active().unwrap().doc.bounds();
+        assert_visible_pixels(&mut app, bounds);
+    }
+
+    fn settle_redraw(app: &mut PhotocraftApp) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        let gpu = app.gpu.clone().unwrap();
+        let id = app.session.active().unwrap().doc.id;
+        while !app.redraws.is_empty() {
+            crate::background_redraw::poll(app, &gpu, id);
+            assert!(std::time::Instant::now() < deadline, "background redraw did not finish");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+
     fn assert_visible_pixels(app: &mut PhotocraftApp, visible: DRect) {
         let (doc, _) = display_doc(app, 0);
         let gpu = app.gpu.clone().unwrap();
