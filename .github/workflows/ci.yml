@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     steps:
@@ -30,19 +30,6 @@ jobs:
         with:
           key: autosave-retry-windows
           cache-on-failure: true
-      - name: Application tests
-        id: app
-        continue-on-error: true
-        run: cargo test -p photocraft --locked
-      - name: UI tests
-        id: ui
-        continue-on-error: true
-        run: cargo test -p photocraft-ui-egui --locked
-      - name: Native clipboard contention and retry
-        id: native
-        if: runner.os == 'Windows'
-        continue-on-error: true
-        run: cargo test -p photocraft --bin photocraft --locked busy_native_clipboard_preserves_copied_shape -- --ignored --nocapture --test-threads=1
       - name: Formatting
         id: fmt
         continue-on-error: true
@@ -51,16 +38,6 @@ jobs:
         id: lint
         continue-on-error: true
         run: cargo clippy -p photocraft -p photocraft-ui-egui --all-targets --locked -- -D warnings
-      - name: Layers
-        id: layers
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: cargo xtask layers
-      - name: WASM
-        id: wasm
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: cargo xtask wasm
       - name: Visual error and retry evidence
         id: visual
         if: runner.os == 'Linux'

@@ -2709,6 +2709,10 @@ mod clipboard_tests {
         crate::menus::invoke(h.state_mut(), &ctx, "edit.paste", serde_json::json!({})).unwrap();
         h.run_steps(3);
         assert!(!h.state().ui.status_error);
+        assert!(h.state().ui.status.is_empty(), "retry clears the clipboard error: {}", h.state().ui.status);
+        // Direct harness mutations need a repaint after the command has cleared the error.
+        h.ctx.request_repaint();
+        h.run_steps(2);
         h.render().unwrap().save(out.join("clipboard-retry.png")).unwrap();
     }
 
