@@ -867,9 +867,9 @@ impl Above {
     }
 
     /// Draw the composite over the moving pixels.
-    fn draw(&self, painter: &egui::Painter, xf: &ViewXform) {
+    fn draw(&self, painter: &egui::Painter, xf: &ViewXform, display: Option<&photocraft_engine::display_color::CanvasDisplay>) {
         let Some((texture, r)) = &self.shown else { return };
-        let (tex, uv) = texture.pick(painter.ctx(), xf.zoom * painter.ctx().pixels_per_point(), 1.0, false);
+        let (tex, uv) = texture.pick_display(painter.ctx(), xf.zoom * painter.ctx().pixels_per_point(), 1.0, false, display);
         let mut mesh = egui::Mesh::with_texture(tex);
         let corners = [(r.x0, r.y0, 0.0, 0.0), (r.x1, r.y0, uv[0], 0.0), (r.x1, r.y1, uv[0], uv[1]), (r.x0, r.y1, 0.0, uv[1])];
         for (x, y, u, v) in corners {
@@ -2048,6 +2048,9 @@ fn front_vertices(h: &Homography, n: usize) -> Vec<bool> {
 /// Warped preview of the moving pixels plus the box, handles and reference point.
 pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform) {
     let (Some(t), Some(pv)) = (&app.ui.transform, &app.transform_preview) else { return };
+    let output = crate::monitor_status::view_display(app, painter.ctx());
+    let (display, _) = crate::canvas::canvas_display(app, &pv.doc, output);
+    let display = display.as_deref();
     let scr = |q: [f64; 2]| xf.to_screen(q[0] as f32, q[1] as f32);
     if let Some(w) = &t.warp {
         let over_canvas = painter.ctx().input(|i| i.pointer.hover_pos()).filter(|p| xf.rect.contains(*p)).map(|p| xf.to_doc(p));
@@ -2057,11 +2060,12 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
             let tool = pv.split_tool.or_else(|| (alt || pv.split_quick).then(|| quick_split_kind(&w.to_mesh(1, 1), w.bounds, p)));
             tool.map(|tool| (tool, p))
         });
-        draw_warp(painter, xf, t, w, pv, guide);
+        draw_warp(painter, xf, t, w, pv, guide, display);
         return;
     }
     let ctx = painter.ctx();
-    let styled = styled_frame(app, xf.zoom * ctx.pixels_per_point(), ctx.input(|i| i.pointer.any_down())).and_then(|(s, frame)| s.texture(ctx, &frame));
+    let styled =
+        styled_frame(app, xf.zoom * ctx.pixels_per_point(), ctx.input(|i| i.pointer.any_down())).and_then(|(s, frame)| s.texture(ctx, &frame, display));
     if let Some((tex, r)) = styled {
         let mut mesh = egui::Mesh::with_texture(tex);
         for (x, y, u, v) in [(r[0], r[1], 0.0, 0.0), (r[2], r[1], 1.0, 0.0), (r[2], r[3], 1.0, 1.0), (r[0], r[3], 0.0, 1.0)] {
@@ -2076,8 +2080,8 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
         let zoom = xf.zoom * painter.ctx().pixels_per_point();
         // Content-Aware Scale shows its latest live result once there is one.
         let (tex, uv) = match pv.content_aware.as_ref().and_then(|l| l.shown(t)) {
-            Some((texture, texel)) => texture.pick(painter.ctx(), zoom, texel, false),
-            None => pv.texture.pick(painter.ctx(), zoom, quad_scale(t), t.interpolation == "nearest"),
+            Some((texture, texel)) => texture.pick_display(painter.ctx(), zoom, texel, false, display),
+            None => pv.texture.pick_display(painter.ctx(), zoom, quad_scale(t), t.interpolation == "nearest", display),
         };
         let mut mesh = egui::Mesh::with_texture(tex);
         let tint = Color32::from_white_alpha((pv.opacity.clamp(0.0, 1.0) * 255.0) as u8);
@@ -2103,7 +2107,7 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
         painter.add(clip_to_canvas(mesh, canvas_size(pv), |p| xf.to_screen(p.x, p.y)));
     }
     if let Some(a) = &pv.above {
-        a.draw(painter, xf);
+        a.draw(painter, xf, display);
     }
     if pv.committing.is_some() {
         return;
@@ -2335,12 +2339,20 @@ fn draw_warp_points(painter: &egui::Painter, m: &BezierMesh, scr: impl Fn([f64; 
     }
 }
 
-fn draw_warp(painter: &egui::Painter, xf: &ViewXform, t: &TransformSession, w: &Warp, pv: &TransformPreview, guide: Option<(SplitTool, [f64; 2])>) {
+fn draw_warp(
+    painter: &egui::Painter,
+    xf: &ViewXform,
+    t: &TransformSession,
+    w: &Warp,
+    pv: &TransformPreview,
+    guide: Option<(SplitTool, [f64; 2])>,
+    display: Option<&photocraft_engine::display_color::CanvasDisplay>,
+) {
     let scr = |q: [f64; 2]| xf.to_screen(q[0] as f32, q[1] as f32);
     let r = t.rect;
     let m = w.to_mesh(1, 1);
     let (us, vs) = crate::warp_preview::samples(&m, xf.zoom as f64);
-    let (tex, uv) = pv.texture.pick(painter.ctx(), xf.zoom * painter.ctx().pixels_per_point(), 1.0, t.interpolation == "nearest");
+    let (tex, uv) = pv.texture.pick_display(painter.ctx(), xf.zoom * painter.ctx().pixels_per_point(), 1.0, t.interpolation == "nearest", display);
     let mut mesh = egui::Mesh::with_texture(tex);
     let tint = Color32::from_white_alpha((pv.opacity.clamp(0.0, 1.0) * 255.0) as u8);
     for v in &vs {
@@ -2354,7 +2366,7 @@ fn draw_warp(painter: &egui::Painter, xf: &ViewXform, t: &TransformSession, w: &
     mesh.indices = crate::warp_preview::triangle_order(&pos, &rest, us.len());
     painter.add(clip_to_canvas(mesh, canvas_size(pv), |p| xf.to_screen(p.x, p.y)));
     if let Some(a) = &pv.above {
-        a.draw(painter, xf);
+        a.draw(painter, xf, display);
     }
     let accent = crate::theme::Tokens::get(painter.ctx()).accent;
     // Transform Path › Warp: the path drawn through the warp.
@@ -4744,19 +4756,21 @@ mod tests {
     #[test]
     fn transform_preview_preserves_displayed_profile_colors() {
         let bounds = photocraft_geom::Rect::new(0, 0, 8, 8);
-        for wide_gamut in [false, true] {
+        for (wide_gamut, monitor) in [(false, "srgb"), (true, "srgb"), (false, "display-p3")] {
             let mut app = app_with_square(8, bounds);
-            app.session.edit("original color sample", |doc, active| {
-                if wide_gamut {
-                    doc.icc_profile = Some(photocraft_cms::Builtin::AdobeRgbCompat.profile().to_bytes());
-                }
-                doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap().fill_rect(bounds, &[0.55, 0.35, 0.2, 1.0]);
-                Ok(())
-            }).unwrap();
-            app.session.color.settings.monitor_profile = "srgb".into();
+            app.session
+                .edit("original color sample", |doc, active| {
+                    if wide_gamut {
+                        doc.icc_profile = Some(photocraft_cms::Builtin::AdobeRgbCompat.profile().to_bytes());
+                    }
+                    doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap().fill_rect(bounds, &[0.55, 0.35, 0.2, 1.0]);
+                    Ok(())
+                })
+                .unwrap();
+            app.session.color.settings.monitor_profile = monitor.into();
             let st = app.session.active().unwrap();
             let display = app.session.color.canvas_display(&st.doc).unwrap();
-            assert_eq!(!display.is_identity(), wide_gamut);
+            assert_eq!(!display.is_identity(), wide_gamut || monitor != "srgb");
             let composite = photocraft_compose::render(&st.doc, bounds);
             let expected = crate::canvas::display_image(Some(&display), &composite);
             let ctx = gpu_ctx();
@@ -4772,15 +4786,19 @@ mod tests {
             let mut out = ctx.run_ui(egui::RawInput { max_texture_side: Some(16384), ..Default::default() }, |ui| {
                 draw_overlay(&app, &ui.ctx().layer_painter(egui::LayerId::background()), &xf);
             });
-            let texture = out.shapes.iter().find_map(|s| match &s.shape {
-                egui::Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => Some(mesh.texture_id),
-                _ => None,
-            }).expect("transform draws a textured mesh");
+            let texture = out
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => Some(mesh.texture_id),
+                    _ => None,
+                })
+                .expect("transform draws a textured mesh");
             let upload = out.textures_delta.set.get(&texture).and_then(|updates| updates.last()).expect("drawn texture was uploaded");
             let egui::ImageData::Color(image) = &upload.image;
             let shown = image.pixels[0];
             out.textures_delta.clear();
-            assert_eq!(shown, expected.pixels[0], "transform changed displayed color; wide_gamut={wide_gamut}");
+            assert_eq!(shown, expected.pixels[0], "transform changed displayed color; wide_gamut={wide_gamut}, monitor={monitor}");
         }
     }
 

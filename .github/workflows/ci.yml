@@ -1,4 +1,4 @@
-name: Transform display color baseline
+name: Transform display color focused verification
 on:
   workflow_dispatch:
 permissions:
@@ -22,5 +22,10 @@ jobs:
         with:
           key: transform-color-focused
           cache-on-failure: true
-      - name: Transform color regression on unchanged main
-        run: cargo test -p photocraft-ui-egui --lib --locked transform_preview_preserves_displayed_profile_colors -- --nocapture
+      - name: Transform regression suite
+        run: cargo test -p photocraft-ui-egui --lib --locked transform_ -- --nocapture
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: UI lint
+        run: cargo clippy -p photocraft-ui-egui --all-targets --locked -- -D warnings
