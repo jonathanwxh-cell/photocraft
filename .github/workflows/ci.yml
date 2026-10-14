@@ -1,4 +1,4 @@
-name: Native clipboard contention focused verification
+name: Clipboard read failure verification
 on:
   workflow_dispatch:
 permissions:
@@ -9,18 +9,79 @@ env:
   PHOTOCRAFT_NO_PRINT: '1'
 jobs:
   baseline:
-    runs-on: windows-latest
-    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev libvulkan1 mesa-vulkan-drivers
       - uses: Swatinem/rust-cache@v2
         with:
           key: autosave-retry-windows
           cache-on-failure: true
-      - name: Native clipboard contention
+      - name: Application tests
+        id: app
+        continue-on-error: true
+        run: cargo test -p photocraft --locked
+      - name: UI tests
+        id: ui
+        continue-on-error: true
+        run: cargo test -p photocraft-ui-egui --locked
+      - name: Native clipboard contention and retry
+        id: native
+        if: runner.os == 'Windows'
+        continue-on-error: true
         run: cargo test -p photocraft --bin photocraft --locked busy_native_clipboard_preserves_copied_shape -- --ignored --nocapture --test-threads=1
-      - name: Clipboard UI regressions
-        run: cargo test -p photocraft-ui-egui --lib --locked clipboard -- --nocapture
       - name: Formatting
+        id: fmt
+        continue-on-error: true
         run: cargo fmt --all -- --check
+      - name: Strict Clippy
+        id: lint
+        continue-on-error: true
+        run: cargo clippy -p photocraft -p photocraft-ui-egui --all-targets --locked -- -D warnings
+      - name: Layers
+        id: layers
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: cargo xtask layers
+      - name: WASM
+        id: wasm
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: cargo xtask wasm
+      - name: Visual error and retry evidence
+        id: visual
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        env:
+          PHOTOCRAFT_CLIPBOARD_EVIDENCE: clipboard-evidence
+        run: cargo test -p photocraft-ui-egui --lib --locked clipboard_error_and_retry_visual_evidence -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Linux'
+        with:
+          name: clipboard-error-retry
+          path: clipboard-evidence/*.png
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Preserve failed check outcomes
+        if: always()
+        shell: bash
+        env:
+          CHECK_OUTCOMES: ${{ join(steps.*.outcome, ' ') }}
+        run: |
+          if [[ " $CHECK_OUTCOMES " == *" failure "* ]]; then
+            echo 'One or more checks failed. Inspect the individual step logs; the run is not green.'
+            exit 1
+          fi
