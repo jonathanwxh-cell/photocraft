@@ -64,7 +64,6 @@ supports many more, including CR3).
 
 | Camera format | PhotoCraft | Evidence |
 |---|---|---|
-| 2026-10-14 | minor | CSH custom-shape set import (#5359, FILE-215-15); export and Photoshop-written fixture verification remain open; no estimate changed |
 | DNG (incl. LJPEG and JPEG XL tiles) | yes; lossy DNG no | FILE-215-11 |
 | Canon CR2 | yes | |
 | Canon CR3 | detected, unsupported | `crates/raw/src/lib.rs:219` |
