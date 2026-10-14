@@ -182,6 +182,9 @@ mod tests {
             app
         });
         h.run_steps(8);
+        let destination = std::env::var("PHOTOCRAFT_CSH_EVIDENCE").unwrap_or_else(|_| "csh-evidence".into());
+        std::fs::create_dir_all(&destination).unwrap();
+        h.render().unwrap().save(std::path::Path::new(&destination).join("before-import.png")).unwrap();
         h.get_by_label("Import Shapes…").click();
         h.run_steps(12);
         assert!(matches!(requests.borrow().first(), Some(crate::file_dialog::FileDialogRequest::Open { extensions: Some(exts), .. }) if exts == &["csh"]));
@@ -189,8 +192,6 @@ mod tests {
         assert!(!h.state().ui.status_error);
         h.state_mut().run("shape.presets.place", json!({"preset": "Triangle", "rect": [60, 60, 280, 180], "fill": "#d85a32"})).unwrap();
         h.run_steps(8);
-        let destination = std::env::var("PHOTOCRAFT_CSH_EVIDENCE").unwrap_or_else(|_| "csh-evidence".into());
-        std::fs::create_dir_all(&destination).unwrap();
         h.render().unwrap().save(std::path::Path::new(&destination).join("imported-triangle.png")).unwrap();
     }
 }
