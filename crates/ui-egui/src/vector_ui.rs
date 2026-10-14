@@ -42,6 +42,43 @@ impl PenPath {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct PenDocuments {
+    owner: Option<photocraft_doc::DocId>,
+    drafts: std::collections::HashMap<photocraft_doc::DocId, PenPath>,
+}
+
+/// Swap the active draft by document identity, without committing it into another document.
+/// Closed documents release their drafts; tab reordering does not change their owners.
+pub(crate) fn sync_pen_document(app: &mut PhotocraftApp) {
+    let current = app.session.active().map(|st| st.doc.id);
+    let documents = app.session.documents();
+    let open = |id: &photocraft_doc::DocId| documents.iter().any(|st| st.doc.id == *id);
+    let state = &mut app.ui.pen_documents;
+    state.drafts.retain(|id, _| open(id));
+    if state.owner == current {
+        return;
+    }
+    // A restored UI draft has no recorded owner until its first document is available.
+    if state.owner.is_none() && current.is_some() {
+        state.owner = current;
+        return;
+    }
+    if let Some(mut pen) = app.ui.pen.take()
+        && let Some(owner) = state.owner.filter(open)
+    {
+        pen.dragging = false;
+        pen.adjusting_last = false;
+        pen.moving = None;
+        state.drafts.insert(owner, pen);
+    }
+    if app.ui.direct_selection.target == Some(crate::direct_select::PathRef::Pen) {
+        app.ui.direct_selection = Default::default();
+    }
+    state.owner = current;
+    app.ui.pen = current.and_then(|id| state.drafts.remove(&id));
+}
+
 pub fn is_shape_tool(t: Tool) -> bool {
     matches!(t, Tool::Rectangle | Tool::EllipseShape | Tool::Triangle | Tool::Polygon | Tool::Line | Tool::CustomShape)
 }
@@ -208,6 +245,7 @@ pub fn closes_path_at(app: &PhotocraftApp, tool: Tool, x: f64, y: f64) -> bool {
 /// Pen press: close on the first anchor, reshape the last anchor's outgoing handle,
 /// or add a new anchor (dragging a new anchor pulls symmetrical handles).
 pub fn pen_down(app: &mut PhotocraftApp, x: f64, y: f64) {
+    sync_pen_document(app);
     let tol = 6.0 / app.point_zoom().max(0.01) as f64;
     let pen = app.ui.pen.get_or_insert_with(PenPath::default);
     if let Some(first) = pen.knots.first().map(|k| k[0])
@@ -399,6 +437,7 @@ pub(crate) fn pen_replace(app: &mut PhotocraftApp, path: &Path) {
 
 /// Finish the pen path: a work path (Path mode) or a new shape layer (Shape mode).
 pub fn pen_commit(app: &mut PhotocraftApp, closed: bool) {
+    sync_pen_document(app);
     let Some(mut pen) = app.ui.pen.take() else { return };
     if app.ui.direct_selection.target == Some(crate::direct_select::PathRef::Pen) {
         // Its anchors are no longer the Pen's: the committed path is another path.
@@ -561,6 +600,7 @@ fn curvature_hit(app: &PhotocraftApp, x: f64, y: f64) -> Option<usize> {
 /// Curvature Pen press: clicking the first anchor closes the path, pressing another anchor
 /// grabs it to move, anywhere else adds a smooth anchor (still draggable until the release).
 pub fn curvature_down(app: &mut PhotocraftApp, x: f64, y: f64) {
+    sync_pen_document(app);
     if app.ui.pen.as_ref().is_some_and(|p| !p.curvature) {
         pen_commit(app, false);
     }

@@ -1130,6 +1130,7 @@ impl PhotocraftApp {
     }
 
     pub fn sync_views(&mut self) {
+        vector_ui::sync_pen_document(self);
         type_transform::cancel_stale(self);
         crate::cam_transform::cancel_stale(self);
         crate::lasso_ui::cancel_stale(self);
