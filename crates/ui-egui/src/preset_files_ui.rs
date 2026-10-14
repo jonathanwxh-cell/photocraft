@@ -129,7 +129,7 @@ mod csh_fixture;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use egui_kittest::kittest::{NodeT, Queryable};
+    use egui_kittest::kittest::Queryable;
 
     #[test]
     fn recognises_preset_files() {
