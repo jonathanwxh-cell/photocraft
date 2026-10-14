@@ -23,5 +23,7 @@ jobs:
           key: menu-place-focused
           cache-on-failure: true
       - name: Verify Pen document isolation and vector regressions
-        run: cargo test -p photocraft-ui-egui --lib --locked vector_ui:: -- --nocapture
+        run: |
+          cargo test -p photocraft-ui-egui --lib --locked vector_ui:: -- --nocapture
+
 
