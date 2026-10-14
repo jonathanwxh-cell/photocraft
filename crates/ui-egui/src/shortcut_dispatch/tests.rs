@@ -767,6 +767,16 @@ fn type_size_keys_follow_key_position_and_the_typed_selection() {
 /// Diagnostic for #5526: one copy and one paste across already-open documents.
 #[test]
 fn cross_document_copy_pastes_on_the_first_shortcut() {
+    // egui_kittest drives App::ui but does not invoke the native raw-input hook.
+    // Feed clipboard events through the same normalization used by that hook.
+    let clipboard_events = |h: &mut Harness<'_, PhotocraftApp>, events| {
+        let mut raw = egui::RawInput { events, ..Default::default() };
+        crate::shortcuts::clipboard_keys(&h.ctx, h.ctx.text_edit_focused() || h.state().ui.text_edit.is_some(), &mut raw);
+        for event in raw.events {
+            h.event(event);
+        }
+        h.run_steps(3);
+    };
     for place in [Place::Canvas, Place::LayersRow] {
         for release_only in [false, true] {
             let mut h = harness();
@@ -774,8 +784,7 @@ fn cross_document_copy_pastes_on_the_first_shortcut() {
             assert!(h.state_mut().session.set_active(0));
             h.run_steps(4);
             put_focus(&mut h, place);
-            h.event(egui::Event::Copy);
-            h.run_steps(2);
+            clipboard_events(&mut h, vec![egui::Event::Copy]);
             assert!(h.state().session.clipboard.is_some(), "{place:?}: copy populated the clipboard");
             press(&mut h, "Ctrl+Tab");
             assert_eq!(h.state().session.active_index(), Some(1));
@@ -783,9 +792,13 @@ fn cross_document_copy_pastes_on_the_first_shortcut() {
             if release_only {
                 // An image clipboard may produce no text Paste event or V key-down.
                 let modifiers = platform(Modifiers::COMMAND);
-                h.event(egui::Event::ModifiersChanged(modifiers));
-                h.event(egui::Event::Key { key: egui::Key::V, physical_key: None, pressed: false, repeat: false, modifiers });
-                h.run_steps(3);
+                clipboard_events(
+                    &mut h,
+                    vec![
+                        egui::Event::ModifiersChanged(modifiers),
+                        egui::Event::Key { key: egui::Key::V, physical_key: None, pressed: false, repeat: false, modifiers },
+                    ],
+                );
             } else {
                 press(&mut h, "Cmd+V");
             }
