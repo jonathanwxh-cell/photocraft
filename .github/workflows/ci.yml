@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 10
+          fetch-depth: 30
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -24,18 +24,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: false
-      - name: Pointer baseline must fail on unchanged production code
+      - name: Selection-tool baseline must fail on unchanged production code
         run: |
           cp crates/ui-egui/src/lib.rs /tmp/fixed-lib.rs
           git show 4e7a17cd5d5723313f459753663d0d155f047e19:crates/ui-egui/src/lib.rs > crates/ui-egui/src/lib.rs
           set +e
-          cargo test -p photocraft-ui-egui --lib marquee_drag_after_hiding_extras_restores_selection_visibility -- --nocapture > /tmp/pointer-baseline.log 2>&1
+          cargo test -p photocraft-ui-egui --lib creating_a_selection_restores_hidden_extras -- --nocapture > /tmp/pointer-baseline.log 2>&1
           result=$?
           set -e
           cp /tmp/fixed-lib.rs crates/ui-egui/src/lib.rs
           cat /tmp/pointer-baseline.log
           test "$result" -eq 101
-          grep -q 'a new marquee must become visible after hiding Extras' /tmp/pointer-baseline.log
+          grep -q 'new selections stayed hidden after Extras was disabled' /tmp/pointer-baseline.log
           grep -q 'test result: FAILED' /tmp/pointer-baseline.log
       - name: Fixed regression and full affected crate tests
         run: cargo test -p photocraft-ui-egui
@@ -47,3 +47,19 @@ jobs:
           cargo xtask layers
       - name: WASM
         run: cargo xtask wasm
+      - name: Render selection visibility states
+        env:
+          XDG_RUNTIME_DIR: /tmp
+          WGPU_BACKEND: vulkan
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
+          cargo build -p photocraft-ui-egui --example snapshot
+          python3 .github/scripts/verify-5597-render.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selection-visibility-evidence
+          path: selection-evidence/
+          retention-days: 7
+          if-no-files-found: ignore
