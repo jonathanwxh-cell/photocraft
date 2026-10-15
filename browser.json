@@ -1,0 +1,21 @@
+{
+  "readCalls": [
+    {
+      "name": "qa-0.png",
+      "size": 75
+    },
+    {
+      "name": "qa-1.png",
+      "size": 75
+    },
+    {
+      "name": "qa-2.png",
+      "size": 75
+    },
+    {
+      "name": "qa-3.png",
+      "size": 75
+    }
+  ],
+  "errors": []
+}
