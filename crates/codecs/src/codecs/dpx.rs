@@ -752,6 +752,21 @@ mod tests {
     }
 
     #[test]
+    fn cineon_scan_directions_decode_upright() {
+        // Kodak Cineon 4.5, section 1.12: code 1 reverses page scan (vertical),
+        // code 2 reverses line scan (horizontal), unlike DPX's ordering.
+        let px: Vec<[u16; 3]> = (1..=6).map(|v| [v, v + 10, v + 20]).collect();
+        for (orientation, expected) in [(0, [1, 2, 3, 4, 5, 6]), (1, [5, 6, 3, 4, 1, 2]), (2, [2, 1, 4, 3, 6, 5]), (3, [6, 5, 4, 3, 2, 1])] {
+            let mut bytes = cineon(2, 3, 3, &px);
+            bytes[192] = orientation;
+            let image = crate::decode(&bytes).unwrap();
+            assert_eq!((image.width(), image.height()), (2, 3));
+            let want: Vec<u16> = expected.into_iter().flat_map(|v| [v, v + 10, v + 20]).map(|v| widen(v, 1023)).collect();
+            assert_eq!(image.to_u16_samples().unwrap(), want, "Cineon scan direction {orientation} must decode upright");
+        }
+    }
+
+    #[test]
     fn cineon_reads_ten_bit_rgb() {
         let px = [[0, 512, 1023], [1023, 0, 256]];
         let b = cineon(2, 1, 3, &px);
