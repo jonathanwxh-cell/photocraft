@@ -707,4 +707,22 @@ mod tests {
             assert_eq!(h.state().session.active().unwrap().doc.size.width, 50, "{command}");
         }
     }
+    #[test]
+    fn relative_canvas_checkbox_then_typing_changes_canvas_by_delta() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.session.execute("file.new", json!({"width": 100, "height": 50})).unwrap();
+        let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+        let id = open(h.state_mut(), "image.canvasSize").unwrap();
+        h.run_steps(3);
+        h.get_by_label("Relative").click();
+        h.run_steps(3);
+        let f = fields(&h);
+        assert_eq!(f.get("relative"), Some(&json!(true)), "checkbox must retain relative mode");
+        assert_eq!((num(&f, "width"), num(&f, "height")), (0.0, 0.0), "unchanged canvas has zero deltas");
+        type_width(&mut h, "10");
+        crate::dialogs::confirm(h.state_mut(), id).unwrap();
+        assert_eq!(h.state().session.active().unwrap().doc.size, photocraft_doc::Size::new(110, 50));
+    }
 }
