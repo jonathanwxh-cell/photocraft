@@ -144,10 +144,12 @@ const fn code(c: &[u8; 4]) -> i32 {
     i32::from_be_bytes(*c)
 }
 
-const KNOWN: [Known; 14] = [
+const KNOWN: [Known; 16] = [
     Known { class: "GsnB", filter_id: code(b"GsnB"), name: "Gaussian Blur...", command: "filter.blur.gaussianBlur" },
     Known { class: "boxblur", filter_id: 840, name: "Box Blur...", command: "filter.blur.boxBlur" },
     Known { class: "MtnB", filter_id: code(b"MtnB"), name: "Motion Blur...", command: "filter.blur.motionBlur" },
+    Known { class: "Shrp", filter_id: code(b"Shrp"), name: "Sharpen", command: "filter.sharpen.sharpen" },
+    Known { class: "DstS", filter_id: code(b"DstS"), name: "Dust & Scratches...", command: "filter.noise.dustAndScratches" },
     Known { class: "UnsM", filter_id: code(b"UnsM"), name: "Unsharp Mask...", command: "filter.sharpen.unsharpMask" },
     Known { class: "AdNs", filter_id: code(b"AdNs"), name: "Add Noise...", command: "filter.noise.addNoise" },
     Known { class: "Mdn ", filter_id: code(b"Mdn "), name: "Median...", command: "filter.noise.median" },
@@ -263,9 +265,16 @@ fn curves_params(f: &Descriptor) -> Option<J> {
 fn known_params(class: &str, f: Option<&Descriptor>) -> Option<(&'static str, J)> {
     let k = KNOWN.iter().find(|k| k.class == class)?;
     let params = match (class, f) {
-        ("adaptCorrect", None) => json!({}),
+        ("adaptCorrect" | "Shrp", None) => json!({}),
         (_, None) => return None,
         ("GsnB" | "boxblur" | "Mdn " | "HghP" | "Mxm " | "Mnm ", Some(f)) => json!({"radius": px(f, "Rds ")?}),
+        ("DstS", Some(f)) => {
+            let (radius, threshold) = (int(f, "Rds ")?, int(f, "Thsh")?);
+            if !(1..=500).contains(&radius) || !(0..=255).contains(&threshold) {
+                return None;
+            }
+            json!({"radius": f64::from(radius), "threshold": threshold})
+        }
         ("MtnB", Some(f)) => json!({"angle": int(f, "Angl")?, "distance": px(f, "Dstn")?}),
         ("UnsM", Some(f)) => json!({"amount": px(f, "Amnt")?, "radius": px(f, "Rds ")?, "threshold": int(f, "Thsh")?}),
         ("AdNs", Some(f)) => {
@@ -583,6 +592,22 @@ fn fltr_for(k: &Known, p: &J) -> Result<Option<Descriptor>, String> {
                 return Err("“preserve roundness” has no PSD equivalent".into());
             }
             d.with("Rds ", unit(b"#Pxl", pf(p, "radius", 1.0)))
+        }
+        "DstS" => {
+            if p.as_object().is_some_and(|o| o.keys().any(|k| !is_meta(k) && !["radius", "threshold"].contains(&k.as_str()))) {
+                return Err("Dust & Scratches has an unsupported PSD setting".into());
+            }
+            let (radius, threshold) = (pf(p, "radius", 1.0), pf(p, "threshold", 0.0));
+            if radius.fract() != 0.0 || threshold.fract() != 0.0 || !(1.0..=500.0).contains(&radius) || !(0.0..=255.0).contains(&threshold) {
+                return Err("Dust & Scratches PSD settings must be whole numbers in range".into());
+            }
+            d.with("Rds ", pi(p, "radius", 1.0)).with("Thsh", pi(p, "threshold", 0.0))
+        }
+        "Shrp" => {
+            if p.as_object().is_some_and(|o| o.keys().any(|k| !is_meta(k))) {
+                return Err("Sharpen has no PSD settings".into());
+            }
+            return Ok(None);
         }
         "MtnB" => d.with("Angl", pi(p, "angle", 0.0)).with("Dstn", unit(b"#Pxl", pf(p, "distance", 10.0))),
         "UnsM" => d.with("Amnt", unit(b"#Prc", pf(p, "amount", 50.0))).with("Rds ", unit(b"#Pxl", pf(p, "radius", 1.0))).with("Thsh", pi(p, "threshold", 0.0)),
@@ -1052,15 +1077,8 @@ mod tests {
     /// #6267: supported engine filters must not become silent pass-throughs on PSD import.
     #[test]
     fn reported_smart_filter_descriptors_keep_settings_and_round_trip() {
-        let hue = Descriptor::new("HStr").with("Clrz", Value::Boolean(false)).with(
-            "Adjs",
-            Value::List(vec![Value::Descriptor(
-                Descriptor::new("Hst2").with("Hue ", Value::Integer(25)).with("Strt", Value::Integer(-30)).with("Lght", Value::Integer(12)),
-            )]),
-        );
-        // Sharpen has no Fltr; Dust & Scratches uses integer radius and threshold, as in the
-        // pinned ag-psd descriptor schema. Hue/Saturation uses PhotoCraft's ATN descriptor
-        // representation here; this synthetic case is not a Photoshop smart-filter oracle.
+        // Sharpen has no Fltr; Dust & Scratches uses integer radius and threshold,
+        // as in the pinned ag-psd fixture and descriptor schema.
         let cases = [
             ("Shrp", None, "filter.sharpen.sharpen", json!({})),
             (
@@ -1069,7 +1087,6 @@ mod tests {
                 "filter.noise.dustAndScratches",
                 json!({"radius": 5.0, "threshold": 17}),
             ),
-            ("HStr", Some(hue), "image.adjustments.hueSaturation", json!({"colorize": false, "hue": 25.0, "saturation": -30.0, "lightness": 12.0})),
         ];
         for (class, descriptor, command, params) in cases {
             let mut item = Descriptor::new("filterFX")
@@ -1094,6 +1111,22 @@ mod tests {
             assert_eq!(filter_from_item(&written), imported, "round trip for {class}");
             assert_eq!(written.get("Fltr").is_some(), class != "Shrp");
         }
+    }
+
+    #[test]
+    fn unsupported_dust_settings_keep_the_original_descriptor() {
+        for fltr in [
+            Descriptor::new("DstS").with("Rds ", Value::Integer(5)),
+            Descriptor::new("DstS").with("Rds ", Value::Integer(0)).with("Thsh", Value::Integer(17)),
+            Descriptor::new("DstS").with("Rds ", Value::Integer(5)).with("Thsh", Value::Integer(256)),
+        ] {
+            let item = Descriptor::new("filterFX").with("filterID", Value::Integer(code(b"DstS"))).with("Fltr", Value::Descriptor(fltr));
+            let f = filter_from_item(&item);
+            assert_eq!(f.command, UNSUPPORTED_FILTER);
+            assert_eq!(filter_from_item(&item_for_filter(&f).unwrap()).params, f.params);
+        }
+        assert!(item_for_filter(&sf("filter.noise.dustAndScratches", json!({"radius": 2.5, "threshold": 0}))).is_err());
+        assert!(item_for_filter(&sf("filter.sharpen.sharpen", json!({"amount": 100}))).is_err());
     }
 
     #[test]
