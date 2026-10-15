@@ -1,7 +1,9 @@
 import struct
+import subprocess
 from pathlib import Path
 import OpenImageIO as oiio
 px = [(100,200,300),(400,500,600),(700,800,900),(1023,0,512)]
+reference = None
 for padding in (0,4,12):
     b = bytearray(2048)
     def u32(offset,value): struct.pack_into('>I',b,offset,value)
@@ -27,5 +29,11 @@ for padding in (0,4,12):
     actual=(data.reshape(-1).astype('uint32') >> 6).tolist()
     expected=[v for pixel in px for v in pixel]
     print(padding, actual, flush=True)
-    assert actual==expected, (padding,actual,expected)
-print('Independent decoder preserved every pixel for padding 0, 4, 12')
+    if padding == 0:
+        assert actual==expected, (padding,actual,expected)
+    decoded = subprocess.check_output(['convert',str(path),'-depth','16','rgb:-'])
+    assert len(decoded) == 24, len(decoded)
+    if reference is None:
+        reference = decoded
+    assert decoded == reference, (padding, decoded.hex(), reference.hex())
+print('ImageMagick pixel output matches unpadded reference for padding 0, 4, 12')

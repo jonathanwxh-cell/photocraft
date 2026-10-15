@@ -9,5 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python -m pip install OpenImageIO==3.1.18.1
+      - run: sudo apt-get update -qq && sudo apt-get install -y imagemagick
+      - run: convert -version
       - run: python .github/cineon_oracle.py
 
