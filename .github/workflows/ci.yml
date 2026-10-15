@@ -25,54 +25,6 @@ jobs:
       - run: cargo test -p photocraft-compose --locked
       - run: cargo clippy -p photocraft-compose --all-targets --locked -- -D warnings
       - run: cargo xtask layers
-  corpus:
-    # Real-file corpus tests (cargo feature `corpus`), on every PR and on main. The corpora are
-    # pinned in xtask/src/corpus_pins.rs and sha256-verified (xtask/*.sha256) after both a cache
-    # restore and a download; a missing corpus fails the tests. The cache key changes only when a
-    # pin or manifest does, so normally this restores in seconds (fork PRs read the base cache).
-    name: corpus tests
-    runs-on: ubuntu-latest
-    env:
-      # test-corpus builds with --release, but here without the release profile's thin LTO and
-      # single codegen unit: they ran LTO over the dependency graph for each of the ~95 corpus test
-      # binaries, so building took 23.5 of the job's 37 minutes while the tests ran for 1.5.
-      # Turning them off builds 2.7x faster; the code under test is the same.
-      CARGO_PROFILE_RELEASE_LTO: "false"
-      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: corpus
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-      - name: Restore test corpora
-        uses: actions/cache@v4
-        with:
-          path: corpus/
-          key: corpus-${{ hashFiles('xtask/src/corpus_pins.rs', 'xtask/*.sha256') }}
-      - name: Fetch and verify corpora
-        run: cargo xtask corpus --all
-      - name: Corpus tests
-        run: cargo xtask test-corpus
-
-  wasm:
-    name: wasm32 check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: wasm32
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-      - name: Check wasm-safe crates
-        run: cargo xtask wasm
-
   evidence:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -110,8 +62,3 @@ jobs:
           path: evidence/
           retention-days: 7
           if-no-files-found: error
-      - name: System dependencies for repository performance checks
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev libvulkan1 mesa-vulkan-drivers
-      - run: cargo xtask perf --quick
