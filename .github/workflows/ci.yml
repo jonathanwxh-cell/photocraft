@@ -16,10 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 5
       - name: Validate repaired workflow
         run: |
-          git show HEAD^:.github/workflows/ci.yml > /tmp/repaired-ci.yml
+          git show 0caa7ed5:.github/workflows/ci.yml > /tmp/repaired-ci.yml
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes= /tmp/repaired-ci.yml
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
