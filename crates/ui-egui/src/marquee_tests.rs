@@ -240,7 +240,7 @@ fn the_live_outline_snaps_to_pixels_and_matches_the_committed_selection() {
         press_at(&mut h, 10.3, 10.3, Modifiers::NONE);
         move_to(&mut h, 20.6, 15.4);
         let app = h.state();
-        let live = app.drag.as_ref().and_then(|d| crate::canvas::marquee_preview_px(&app.ui.tool_options, d, app.point_zoom())).unwrap();
+        let live = app.drag.as_ref().and_then(|d| crate::canvas::marquee_preview_px(app, d)).unwrap();
         assert_eq!(live, [10.0, 10.0, 21.0, 16.0], "{tool:?}: whole pixels while dragging");
         release_at(&mut h, 20.6, 15.4, Modifiers::NONE);
         assert_eq!(selection(&h), Rect::new(10, 10, 21, 16), "{tool:?}: the commit is what was shown");
@@ -263,7 +263,7 @@ fn the_live_outline_matches_the_committed_selection_in_a_rotated_view() {
         let (live, pts) = {
             let app = h.state();
             let d = app.drag.as_ref().expect("the drag is on");
-            let live = crate::canvas::marquee_preview_px(&app.ui.tool_options, d, app.point_zoom()).expect("a marquee is dragged");
+            let live = crate::canvas::marquee_preview_px(app, d).expect("a marquee is dragged");
             // Exactly what the canvas paints for this drag.
             (live, crate::canvas::marquee_drag_ants(d, &xf, Some(live)))
         };
@@ -334,7 +334,7 @@ fn a_one_pixel_column_or_row_is_kept_on_release() {
                 }
                 drag_to(&mut h, [10.2, 10.4], end);
                 let app = h.state();
-                let live = app.drag.as_ref().and_then(|d| crate::canvas::marquee_preview_px(&app.ui.tool_options, d, app.point_zoom()));
+                let live = app.drag.as_ref().and_then(|d| crate::canvas::marquee_preview_px(app, d));
                 let shown = [want.x0, want.y0, want.x1, want.y1].map(f64::from);
                 assert_eq!(live, Some(shown), "{tool:?} {name} (existing {existing}): the outline while dragging");
                 assert!(readout(&h, want.width() as i32, want.height() as i32), "{tool:?} {name}: W/H readout");

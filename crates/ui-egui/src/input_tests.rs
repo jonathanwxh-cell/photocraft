@@ -1119,11 +1119,7 @@ fn fixed_ratio_marquee_started_outside_canvas_keeps_ratio() {
             h.run_steps(1);
         }
         let app = h.state();
-        let live = app
-            .drag
-            .as_ref()
-            .and_then(|d| crate::canvas::marquee_preview_px(&app.ui.tool_options, d, app.point_zoom()))
-            .expect("a live marquee is visible before release");
+        let live = app.drag.as_ref().and_then(|d| crate::canvas::marquee_preview_px(app, d)).expect("a live marquee is visible before release");
         press(&mut h, end, false);
         h.run_steps(3);
         let selection = h.state().session.active().unwrap().doc.selection.as_ref().expect("the drag creates a selection");
