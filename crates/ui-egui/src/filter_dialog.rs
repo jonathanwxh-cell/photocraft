@@ -2453,7 +2453,7 @@ mod tests {
             let ctx = h.ctx.clone();
             let id = crate::menus::invoke(h.state_mut(), &ctx, "edit.colorSettings", json!({})).unwrap()["dialog"].as_u64().unwrap();
             h.run_steps(3);
-            h.get_by_label(&choice_label(builtin.id())).click();
+            h.get_by_value(&choice_label(builtin.id())).click();
             h.run_steps(2);
             assert!(h.query_by_label(name).is_some(), "installed profile must appear in working-space menu: {key}");
             assert!(h.query_by_label("Abstract profile regression 6323").is_none(), "abstract profiles are not working spaces");
@@ -2475,8 +2475,8 @@ mod tests {
             assert_eq!(restored_settings["settings"][key], path.to_string_lossy().as_ref());
             let reopened = crate::menus::invoke(h.state_mut(), &ctx, "edit.colorSettings", json!({})).unwrap()["dialog"].as_u64().unwrap();
             h.run_steps(3);
-            assert!(h.query_by_label(name).is_some(), "reopened menu shows installed profile description");
-            h.get_by_label(name).click();
+            assert!(h.query_by_value(name).is_some(), "reopened menu shows installed profile description");
+            h.get_by_value(name).click();
             h.run_steps(2);
             h.get_by_label(&choice_label(builtin.id())).click();
             h.run_steps(2);
