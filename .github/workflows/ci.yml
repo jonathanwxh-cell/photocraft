@@ -24,18 +24,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: false
-      - name: Selection-tool baseline must fail on unchanged production code
+      - name: Selection and pointer baselines must fail on unchanged production code
         run: |
           cp crates/ui-egui/src/lib.rs /tmp/fixed-lib.rs
+          trap 'cp /tmp/fixed-lib.rs crates/ui-egui/src/lib.rs' EXIT
           git show 4e7a17cd5d5723313f459753663d0d155f047e19:crates/ui-egui/src/lib.rs > crates/ui-egui/src/lib.rs
           set +e
-          cargo test -p photocraft-ui-egui --lib creating_a_selection_restores_hidden_extras -- --nocapture > /tmp/pointer-baseline.log 2>&1
-          result=$?
+          cargo test -p photocraft-ui-egui --lib creating_a_selection_restores_hidden_extras -- --nocapture > /tmp/selection-baseline.log 2>&1
+          selection_result=$?
+          cargo test -p photocraft-ui-egui --lib marquee_drag_after_hiding_extras_restores_selection_visibility -- --nocapture > /tmp/pointer-baseline.log 2>&1
+          pointer_result=$?
           set -e
-          cp /tmp/fixed-lib.rs crates/ui-egui/src/lib.rs
+          cat /tmp/selection-baseline.log
           cat /tmp/pointer-baseline.log
-          test "$result" -eq 101
-          grep -q 'new selections stayed hidden after Extras was disabled' /tmp/pointer-baseline.log
+          test "$selection_result" -eq 101
+          test "$pointer_result" -eq 101
+          grep -q 'new selections stayed hidden after Extras was disabled' /tmp/selection-baseline.log
+          grep -q 'a new marquee must become visible after hiding Extras' /tmp/pointer-baseline.log
+          grep -q 'test result: FAILED' /tmp/selection-baseline.log
           grep -q 'test result: FAILED' /tmp/pointer-baseline.log
       - name: Fixed regression and full affected crate tests
         run: cargo test -p photocraft-ui-egui
