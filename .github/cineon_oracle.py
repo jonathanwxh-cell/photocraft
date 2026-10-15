@@ -3,9 +3,9 @@ from pathlib import Path
 import OpenImageIO as oiio
 px = [(100,200,300),(400,500,600),(700,800,900),(1023,0,512)]
 for padding in (0,4,12):
-    b = bytearray(1024)
+    b = bytearray(2048)
     def u32(offset,value): struct.pack_into('>I',b,offset,value)
-    u32(0,0x802A5FD7); u32(4,1024); u32(8,1024)
+    u32(0,0x802A5FD7); u32(4,2048); u32(8,1024); u32(12,1024)
     b[24:28]=b'V4.5'; b[193]=3
     for channel in range(3):
         offset=196+channel*28
