@@ -855,3 +855,30 @@ fn size_readout_follows_the_ruler_unit() {
     ur.rulers = Unit::Millimeters;
     assert_eq!(crate::canvas::readout_in(&ur, 150.0, [1644.0, 2659.0], [0.0, 0.0, 3425.0, 100.0])[0], "579.97 mm");
 }
+
+#[test]
+fn fixed_ratio_bounds_preserve_centred_and_elliptical_gestures() {
+    for tool in [Tool::RectMarquee, Tool::EllipseMarquee] {
+        for ratio in [[16.0, 9.0], [9.0, 16.0], [1.0, 1.0]] {
+            let mut h = harness(tool);
+            h.state_mut().ui.tool_options.marquee_style = "fixedRatio".into();
+            h.state_mut().ui.tool_options.marquee_width = ratio[0];
+            h.state_mut().ui.tool_options.marquee_height = ratio[1];
+            press_at(&mut h, 200.25, 150.5, Modifiers::NONE);
+            // Alt pressed AFTER the gesture starts means centred drawing, not subtraction.
+            mods(&mut h, Modifiers::ALT);
+            move_to(&mut h, 450.0, 350.0);
+            let app = h.state();
+            let live = crate::canvas::marquee_preview_px(app, app.drag.as_ref().unwrap()).unwrap();
+            assert!(live[0] >= 0.0 && live[1] >= 0.0 && live[2] <= 400.0 && live[3] <= 300.0, "{tool:?}: {live:?}");
+            let error = ((live[2] - live[0]) * f64::from(ratio[1]) - (live[3] - live[1]) * f64::from(ratio[0])).abs();
+            // Each extent is quantized to whole pixels; at most one pixel per axis.
+            assert!(error <= f64::from(ratio[0] + ratio[1]), "{ratio:?}: {live:?}");
+            release_at(&mut h, 450.0, 350.0, Modifiers::ALT);
+            let bounds = selection(&h);
+            for (shown, committed) in live.into_iter().zip([bounds.x0, bounds.y0, bounds.x1, bounds.y1]) {
+                assert!((shown - f64::from(committed)).abs() <= 1.0, "{tool:?}: {live:?} vs {bounds:?}");
+            }
+        }
+    }
+}
