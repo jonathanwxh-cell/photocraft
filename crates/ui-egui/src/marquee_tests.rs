@@ -882,3 +882,18 @@ fn fixed_ratio_bounds_preserve_centred_and_elliptical_gestures() {
         }
     }
 }
+
+#[test]
+fn centred_fixed_ratio_square_pixel_snapping_stays_inside_canvas() {
+    let mut h = harness(Tool::RectMarquee);
+    h.state_mut().ui.tool_options.marquee_style = "fixedRatio".into();
+    h.state_mut().ui.tool_options.marquee_width = 1.0;
+    h.state_mut().ui.tool_options.marquee_height = 1.0;
+    // Feed an exact fractional document position to the shared preview/commit calculation;
+    // pointer snapping must not move the regression's press point onto an integer.
+    let mut drag = crate::canvas::Drag::new(Tool::RectMarquee, [200.25, 150.5], vec![[450.0, 350.0, 1.0]], Modifiers::NONE, false);
+    drag.track(Modifiers::ALT);
+    let r = crate::canvas::marquee_preview_px(h.state(), &drag).unwrap();
+    assert!(r[0] >= 0.0 && r[1] >= 0.0 && r[2] <= 400.0 && r[3] <= 300.0, "pixel-snapped centred square escaped canvas: {r:?}");
+    assert_eq!(r[2] - r[0], r[3] - r[1], "fitting must preserve the square");
+}

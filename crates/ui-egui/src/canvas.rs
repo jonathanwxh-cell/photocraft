@@ -260,6 +260,16 @@ pub(crate) fn marquee_preview_px(app: &PhotocraftApp, d: &Drag) -> Option<[f64; 
     let mut r = marquee_px(a, b);
     if marquee_is_square(o, d) {
         r = square_px(r, d.start, last);
+        if o.marquee_style == "fixedRatio" {
+            let size = app.session.active()?.doc.size;
+            // Pixel snapping can grow a centred square by one pixel. Move it back inside
+            // without clipping a side and losing the equal width and height.
+            for (axis, limit) in [f64::from(size.width), f64::from(size.height)].into_iter().enumerate() {
+                let offset = (-r[axis]).max(0.0) - (r[axis + 2] - limit).max(0.0);
+                r[axis] += offset;
+                r[axis + 2] += offset;
+            }
+        }
     }
     (r[2] > r[0] && r[3] > r[1]).then_some(r)
 }
