@@ -1,4 +1,4 @@
-name: Font metadata baseline
+name: Font metadata verification
 on: workflow_dispatch
 permissions:
   contents: read
@@ -11,22 +11,22 @@ env:
 jobs:
   baseline:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: false
-      - name: Compile test binary
-        run: cargo test -p photocraft-text --lib --no-run
-      - name: Require metadata preservation assertion failure on main
-        run: |
-          set +e
-          cargo test -p photocraft-text --lib text_rebuild_preserves_imported_font_metadata -- --nocapture > /tmp/baseline.log 2>&1
-          result=$?
-          set -e
-          cat /tmp/baseline.log
-          test "$result" -eq 101
-          grep -q 'existing font metadata must survive a text edit' /tmp/baseline.log
-          grep -q 'test result: FAILED' /tmp/baseline.log
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Text tests including metadata regressions
+        run: cargo test -p photocraft-text
+      - name: Strict all-target text Clippy
+        run: cargo clippy -p photocraft-text --all-targets -- -D warnings
+      - name: Dependency layers
+        run: cargo xtask layers
+      - name: L0-L6 WASM
+        run: cargo xtask wasm
