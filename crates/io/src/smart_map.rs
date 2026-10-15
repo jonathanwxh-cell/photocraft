@@ -1067,9 +1067,9 @@ mod tests {
                 "DstS",
                 Some(Descriptor::new("DstS").with("Rds ", Value::Integer(5)).with("Thsh", Value::Integer(17))),
                 "filter.noise.dustAndScratches",
-                json!({"radius": 5, "threshold": 17}),
+                json!({"radius": 5.0, "threshold": 17}),
             ),
-            ("HStr", Some(hue), "image.adjustments.hueSaturation", json!({"colorize": false, "hue": 25, "saturation": -30, "lightness": 12})),
+            ("HStr", Some(hue), "image.adjustments.hueSaturation", json!({"colorize": false, "hue": 25.0, "saturation": -30.0, "lightness": 12.0})),
         ];
         for (class, descriptor, command, params) in cases {
             let mut item = Descriptor::new("filterFX")
