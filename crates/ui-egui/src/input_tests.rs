@@ -1087,3 +1087,46 @@ fn move_tool_controls_rotate_from_just_outside_the_box() {
     let tilt = (end[1][1] - end[0][1]).atan2(end[1][0] - end[0][0]).to_degrees();
     assert!((tilt - 90.0).abs() < 8.0 || (tilt + 270.0).abs() < 8.0, "rotated about a quarter turn, got {tilt}° (zoom {zoom})");
 }
+
+/// Probe #6371 through actual canvas input, keeping the pointer inside the image.
+#[test]
+fn zoom_tool_vertical_wheel_drift_probe_6371() {
+    for animations in [false, true] {
+        for zoom_with_wheel in [false, true] {
+            for dy in [-1.0, 1.0] {
+                let mut h = harness();
+                h.state_mut().ui.tool = crate::state::Tool::Zoom;
+                h.state_mut().session.edit_prefs(|p| {
+                    p.general.zoom_with_scroll_wheel = zoom_with_wheel;
+                    p.interface.enable_animations = animations;
+                    p.tools.overscroll = true;
+                });
+                {
+                    let v = &mut h.state_mut().ui.views[0];
+                    v.zoom = 2.0;
+                    v.center = [200.0, 150.0];
+                    v.fit_pending = false;
+                }
+                h.run_steps(4);
+                let p = h.state().last_canvas_rect.center() + vec2(60.0, 20.0);
+                h.hover_at(p);
+                h.run_steps(2);
+                let before = doc_at(&h, p);
+                let center = h.state().ui.views[0].center;
+                for _ in 0..4 {
+                    wheel(&h, dy, Modifiers::NONE);
+                    h.run_steps(40);
+                }
+                let after = doc_at(&h, p);
+                let end = h.state().ui.views[0].center;
+                println!("WHEEL6371 animations={animations} zoom={zoom_with_wheel} dy={dy} center={center:?}->{end:?} anchor={before:?}->{after:?}");
+                if zoom_with_wheel {
+                    assert!((after[0] - before[0]).abs() < 0.05 && (after[1] - before[1]).abs() < 0.05, "wheel zoom lost interior anchor");
+                } else {
+                    assert!((end[0] - center[0]).abs() < 0.01, "vertical wheel caused horizontal pan");
+                    assert!((end[1] - center[1]) * dy < 0.0, "vertical wheel did not pan in its expected direction");
+                }
+            }
+        }
+    }
+}
