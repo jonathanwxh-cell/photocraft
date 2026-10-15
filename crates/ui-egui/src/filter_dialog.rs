@@ -2436,7 +2436,12 @@ mod tests {
             profile.description = name.into();
             std::fs::write(dir.join(format!("{key}.icc")), profile.with_encoded_bytes().to_bytes().as_slice()).unwrap();
         }
+        let mut abstract_profile = photocraft_cms::Builtin::Srgb.profile().clone();
+        abstract_profile.description = "Abstract profile regression 6323".into();
+        abstract_profile.class = photocraft_cms::ProfileClass::Abstract;
+        std::fs::write(dir.join("abstract.icc"), abstract_profile.with_encoded_bytes().to_bytes().as_slice()).unwrap();
         let installed = photocraft_engine::installed_profiles::installed();
+        assert!(installed.iter().any(|p| p.description == "Abstract profile regression 6323" && !p.is_destination()));
         for (_, _, name) in cases {
             assert!(installed.iter().any(|p| p.description == name), "fixture is discovered before opening the dialog: {name}");
         }
@@ -2451,6 +2456,7 @@ mod tests {
             h.get_by_label(&choice_label(builtin.id())).click();
             h.run_steps(2);
             assert!(h.query_by_label(name).is_some(), "installed profile must appear in working-space menu: {key}");
+            assert!(h.query_by_label("Abstract profile regression 6323").is_none(), "abstract profiles are not working spaces");
             for (other, _, other_name) in cases {
                 if other != key {
                     assert!(h.query_by_label(other_name).is_none(), "wrong color space offered in {key}: {other}");
