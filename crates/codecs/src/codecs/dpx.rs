@@ -752,6 +752,35 @@ mod tests {
     }
 
     #[test]
+    fn cineon_declared_scanline_padding_keeps_pixel_rows() {
+        let px = [[100, 200, 300], [400, 500, 600], [700, 800, 900], [1023, 0, 512]];
+        let packed = cineon(2, 2, 3, &px);
+        for padding in [0u32, 4, 12] {
+            let mut bytes = packed[..1024].to_vec();
+            bytes[8..12].copy_from_slice(&1024u32.to_be_bytes());
+            bytes[24..28].copy_from_slice(b"V4.5");
+            for channel in 0..3 {
+                let offset = 196 + channel * 28;
+                bytes[offset + 1] = channel as u8 + 1;
+                bytes[offset + 2] = 10;
+                bytes[offset + 4..offset + 8].copy_from_slice(&2u32.to_be_bytes());
+                bytes[offset + 8..offset + 12].copy_from_slice(&2u32.to_be_bytes());
+            }
+            bytes[681] = 0x85; // filled 32-bit cells, left justified
+            bytes[684..688].copy_from_slice(&padding.to_be_bytes());
+            for row in packed[1024..].chunks_exact(8) {
+                bytes.extend_from_slice(row);
+                bytes.extend(std::iter::repeat_n(0xab, padding as usize));
+            }
+            let size = bytes.len() as u32;
+            bytes[20..24].copy_from_slice(&size.to_be_bytes());
+            let image = crate::decode(&bytes).unwrap();
+            let expected: Vec<u16> = px.iter().flatten().map(|&v| widen(v, 1023)).collect();
+            assert_eq!(image.to_u16_samples().unwrap(), expected, "Cineon row padding {padding} must not become pixels");
+        }
+    }
+
+    #[test]
     fn cineon_reads_ten_bit_rgb() {
         let px = [[0, 512, 1023], [1023, 0, 256]];
         let b = cineon(2, 1, 3, &px);
