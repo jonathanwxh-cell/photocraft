@@ -1090,7 +1090,15 @@ fn move_tool_controls_rotate_from_just_outside_the_box() {
 
 #[test]
 fn fixed_ratio_marquee_started_outside_canvas_keeps_ratio() {
-    for (from, to, outside) in [([20.0, 20.0], [180.0, 110.0], false), ([-100.0, 20.0], [100.0, 110.0], true)] {
+    for (from, to, outside) in [
+        ([20.0, 20.0], [180.0, 110.0], false),
+        ([-100.0, 20.0], [100.0, 110.0], true),
+        ([500.0, 20.0], [300.0, 110.0], true),
+        ([20.0, -100.0], [180.0, 110.0], true),
+        ([20.0, 400.0], [180.0, 190.0], true),
+        // The reporter's gesture crosses both the origin edges and the opposite edge.
+        ([-40.0, -30.0], [500.0, 250.0], true),
+    ] {
         let mut h = harness();
         h.state_mut().ui.tool = crate::state::Tool::RectMarquee;
         h.state_mut().ui.tool_options.marquee_style = "fixedRatio".into();
@@ -1110,6 +1118,12 @@ fn fixed_ratio_marquee_started_outside_canvas_keeps_ratio() {
             h.hover_at(start + (end - start) * (i as f32 / 4.0));
             h.run_steps(1);
         }
+        let app = h.state();
+        let live = app
+            .drag
+            .as_ref()
+            .and_then(|d| crate::canvas::marquee_preview_px(&app.ui.tool_options, d, app.point_zoom()))
+            .expect("a live marquee is visible before release");
         press(&mut h, end, false);
         h.run_steps(3);
         let selection = h.state().session.active().unwrap().doc.selection.as_ref().expect("the drag creates a selection");
@@ -1120,5 +1134,7 @@ fn fixed_ratio_marquee_started_outside_canvas_keeps_ratio() {
         } else {
             assert!(error <= 16.0, "inside-origin control must retain its ratio: {bounds:?}");
         }
+        assert!(live[0] >= 0.0 && live[1] >= 0.0 && live[2] <= 400.0 && live[3] <= 300.0, "the constrained preview stays inside the image: {live:?}");
+        assert_eq!(live, [bounds.x0, bounds.y0, bounds.x1, bounds.y1].map(f64::from), "release commits the geometry shown during the drag");
     }
 }
