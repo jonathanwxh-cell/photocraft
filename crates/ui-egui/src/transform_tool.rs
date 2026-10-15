@@ -4064,43 +4064,49 @@ mod tests {
     /// Investigate #6257: resize, hide and show, both before and after committing.
     #[test]
     fn imported_png_resize_keeps_geometry_after_visibility_toggle() {
-        for smart in [true] {
-            let mut app = app_with_square(64, photocraft_geom::Rect::new(0, 0, 64, 64));
-            app.ui.tool = Tool::Move;
-            if smart {
-                let bytes = photocraft_io::export(&app.session.active().unwrap().doc, "source.png", &Default::default()).unwrap().bytes;
-                app.place_bytes("source.png", bytes, None).unwrap();
-            }
-            let mut h = egui_kittest::Harness::builder().with_size(vec2(1200.0, 800.0)).with_max_steps(64).build_eframe(move |cc| {
-                PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
-                app
-            });
-            h.run_steps(4);
-            let ctx = h.ctx.clone();
-            begin_placed(h.state_mut(), &ctx).unwrap();
-            h.state_mut().ui.extras.snap = false;
-            let original = h.state().ui.transform.as_ref().unwrap().quad;
-            assert_eq!(original, corners([0.0, 0.0, 64.0, 64.0]));
-            press_drag(h.state_mut(), original[2], [32.0, 32.0], egui::Modifiers::NONE);
-            let quad = corners([0.0, 0.0, 32.0, 32.0]);
-            assert_eq!(h.state().ui.transform.as_ref().unwrap().quad, quad);
+        let mut app = app_with_square(64, photocraft_geom::Rect::new(0, 0, 64, 64));
+        app.ui.tool = Tool::Move;
+        let bytes = photocraft_io::export(&app.session.active().unwrap().doc, "source.png", &Default::default()).unwrap().bytes;
+        app.place_bytes("source.png", bytes, None).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1200.0, 800.0)).with_max_steps(64).build_eframe(move |cc| {
+            PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+            app
+        });
+        h.run_steps(4);
+        let ctx = h.ctx.clone();
+        begin_placed(h.state_mut(), &ctx).unwrap();
+        h.state_mut().ui.extras.snap = false;
+        let original = h.state().ui.transform.as_ref().unwrap().quad;
+        assert_eq!(original, corners([0.0, 0.0, 64.0, 64.0]));
+        press_drag(h.state_mut(), original[2], [32.0, 32.0], egui::Modifiers::NONE);
+        let quad = corners([0.0, 0.0, 32.0, 32.0]);
+        assert_eq!(h.state().ui.transform.as_ref().unwrap().quad, quad);
+        h.run_steps(2);
+        let layer = h.state().session.active().unwrap().active_layer.unwrap();
+        for visible in [false, true] {
+            h.state_mut().run("layer.setProps", json!({"layer": layer.0, "visible": visible})).unwrap();
             h.run_steps(2);
-            let layer = h.state().session.active().unwrap().active_layer.unwrap();
-            for visible in [false, true] {
-                h.state_mut().run("layer.setProps", json!({"layer": layer.0, "visible": visible})).unwrap();
-                h.run_steps(2);
-                assert_eq!(h.state().ui.transform.as_ref().unwrap().quad, quad, "visibility changed pending resize, smart={smart}");
-                assert_eq!(h.state().transform_preview.as_ref().unwrap().opacity, if visible { 1.0 } else { 0.0 });
-            }
-            commit(h.state_mut());
-            h.run_steps(4);
-            assert!(h.state().ui.transform.is_none(), "commit must finish");
-            for visible in [true, false, true] {
-                h.state_mut().run("layer.setProps", json!({"layer": layer.0, "visible": visible})).unwrap();
-                h.run_steps(2);
-                let st = h.state().session.active().unwrap();
-                let bounds = photocraft_engine::transform_cmds::transform_frame(&st.doc, st.doc.layer(layer).unwrap());
-                assert_eq!(bounds, photocraft_geom::Rect::new(0, 0, 32, 32), "visibility changed committed resize, smart={smart}");
+            assert_eq!(h.state().ui.transform.as_ref().unwrap().quad, quad, "visibility changed pending resize");
+            assert_eq!(h.state().transform_preview.as_ref().unwrap().opacity, if visible { 1.0 } else { 0.0 });
+        }
+        commit(h.state_mut());
+        h.run_steps(4);
+        assert!(h.state().ui.transform.is_none(), "commit must finish");
+        let area = photocraft_geom::Rect::new(0, 0, 64, 64);
+        let before = photocraft_compose::render(&h.state().session.active().unwrap().doc, area);
+        for visible in [true, false, true] {
+            h.state_mut().run("layer.setProps", json!({"layer": layer.0, "visible": visible})).unwrap();
+            h.run_steps(2);
+            let st = h.state().session.active().unwrap();
+            let bounds = photocraft_engine::transform_cmds::transform_frame(&st.doc, st.doc.layer(layer).unwrap());
+            assert_eq!(bounds, photocraft_geom::Rect::new(0, 0, 32, 32), "visibility changed committed resize");
+            if visible {
+                let after = photocraft_compose::render(&st.doc, area);
+                for y in 0..64 {
+                    for x in 0..64 {
+                        assert_eq!(before.get(x, y), after.get(x, y), "showing the resized PNG changed pixel ({x}, {y})");
+                    }
+                }
             }
         }
     }
