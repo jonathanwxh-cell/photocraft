@@ -11,7 +11,7 @@ for padding in (0,4,12):
         offset=196+channel*28
         b[offset+1]=channel+1; b[offset+2]=10
         u32(offset+4,2); u32(offset+8,2)
-    b[681]=0x85; u32(684,padding)
+    b[681]=5; u32(684,padding)
     for row in range(2):
         for r,g,blue in px[row*2:row*2+2]:
             b.extend(struct.pack('>I',(r<<22)|(g<<12)|(blue<<2)))
