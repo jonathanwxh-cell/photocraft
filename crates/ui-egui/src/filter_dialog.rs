@@ -2426,24 +2426,41 @@ mod tests {
         assert_eq!(std::env::var("HOME").unwrap(), home);
         let dir = std::path::Path::new(&home).join(".local/share/icc");
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("working-6323.icc");
-        let mut profile = photocraft_cms::Builtin::Srgb.profile().clone();
-        profile.description = "Installed working RGB regression 6323".into();
-        std::fs::write(&path, profile.with_encoded_bytes().to_bytes().as_slice()).unwrap();
+        let cases = [
+            ("workingRgb", photocraft_cms::Builtin::Srgb, "Installed working RGB regression 6323"),
+            ("workingCmyk", photocraft_cms::Builtin::CoatedCmyk, "Installed working CMYK regression 6323"),
+            ("workingGray", photocraft_cms::Builtin::DotGain20Compat, "Installed working Gray regression 6323"),
+        ];
+        for (key, builtin, name) in cases {
+            let mut profile = builtin.profile().clone();
+            profile.description = name.into();
+            std::fs::write(dir.join(format!("{key}.icc")), profile.with_encoded_bytes().to_bytes().as_slice()).unwrap();
+        }
         let installed = photocraft_engine::installed_profiles::installed();
-        assert!(installed.iter().any(|p| p.description == "Installed working RGB regression 6323"), "fixture is discovered before opening the dialog");
-        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
-        let mut h = Harness::builder().with_size(egui::vec2(1000.0, 1000.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), &mut app);
-        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
-        let id = open(h.state_mut(), "edit.colorSettings").unwrap();
-        h.run_steps(3);
-        h.get_by_label(&choice_label("srgb")).click();
-        h.run_steps(2);
-        assert!(h.query_by_label("Installed working RGB regression 6323").is_some(), "installed RGB profile must appear in working-space menu");
-        h.get_by_label("Installed working RGB regression 6323").click();
-        h.run_steps(2);
-        assert_eq!(h.state().ui.dialogs.iter().find(|d| d.id == id).unwrap().fields["workingRgb"], path.to_string_lossy().as_ref());
-        crate::dialogs::confirm(h.state_mut(), id).unwrap();
-        assert_eq!(h.state().session.color.settings.working_rgb, path.to_string_lossy().as_ref());
+        for (_, _, name) in cases {
+            assert!(installed.iter().any(|p| p.description == name), "fixture is discovered before opening the dialog: {name}");
+        }
+        for (key, builtin, name) in cases {
+            let path = dir.join(format!("{key}.icc"));
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            let mut h = Harness::builder().with_size(egui::vec2(1000.0, 1000.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), &mut app);
+            PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+            let id = open(h.state_mut(), "edit.colorSettings").unwrap();
+            h.run_steps(3);
+            h.get_by_label(&choice_label(builtin.id())).click();
+            h.run_steps(2);
+            assert!(h.query_by_label(name).is_some(), "installed profile must appear in working-space menu: {key}");
+            for (other, _, other_name) in cases {
+                if other != key {
+                    assert!(h.query_by_label(other_name).is_none(), "wrong color space offered in {key}: {other}");
+                }
+            }
+            h.get_by_label(name).click();
+            h.run_steps(2);
+            assert_eq!(h.state().ui.dialogs.iter().find(|d| d.id == id).unwrap().fields[key], path.to_string_lossy().as_ref());
+            crate::dialogs::confirm(h.state_mut(), id).unwrap();
+            let settings = h.state_mut().session.execute("edit.colorSettings", json!({})).unwrap();
+            assert_eq!(settings["settings"][key], path.to_string_lossy().as_ref());
+        }
     }
 }
