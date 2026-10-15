@@ -312,3 +312,32 @@ fn corpus_vector_blocks_survive_roundtrip() {
     }
     eprintln!("vector corpus: {checked} vector blocks byte-identical after round trip");
 }
+
+#[test]
+fn psd_shape_solid_alpha_survives_reopen_and_rerender() {
+    let mut failures = Vec::new();
+    for (fill_alpha, stroke_alpha) in [(1.0, 1.0), (0.25, 1.0), (1.0, 0.5), (0.0, 0.0)] {
+        let mut d = doc();
+        let mut fill = Color::rgb(1.0, 0.0, 0.0);
+        fill.alpha = fill_alpha;
+        let mut stroke = Color::rgb(0.0, 0.0, 1.0);
+        stroke.alpha = stroke_alpha;
+        let shape = ShapeLayer {
+            path: Path::new(vec![Subpath::polygon(&[(32.0, 32.0), (160.0, 32.0), (160.0, 160.0), (32.0, 160.0)])]),
+            fill: Some(Fill::Solid(fill)),
+            stroke: Some(ShapeStroke { width: 8.0, paint: Fill::Solid(stroke), opacity: 0.75, ..Default::default() }),
+            ..Default::default()
+        };
+        d.layers.push(shape_layer(shape.clone()));
+        let back = roundtrip(&d);
+        let LayerContent::Shape(reopened) = &back.layers[1].content else { panic!("shape remains editable") };
+        let clip = d.bounds();
+        // Render editable geometry afresh, as an edit does, instead of trusting the saved raster cache.
+        let before = photocraft_vector::CompiledShape::new(&shape, 0.01, clip).render_rgba(clip);
+        let after = photocraft_vector::CompiledShape::new(reopened, 0.01, clip).render_rgba(clip);
+        if before != after {
+            failures.push((fill_alpha, stroke_alpha));
+        }
+    }
+    assert!(failures.is_empty(), "solid shape alpha changed after PSD reopen and fresh rendering: {failures:?}");
+}
