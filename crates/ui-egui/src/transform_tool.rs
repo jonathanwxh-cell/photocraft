@@ -4021,6 +4021,46 @@ mod tests {
         assert_eq!(st.history.entries(), history);
     }
 
+    /// Investigate #6257: resize, hide and show, both before and after committing.
+    #[test]
+    fn resized_placed_layer_keeps_geometry_after_visibility_toggle() {
+        for smart in [false, true] {
+            let mut app = app_with_square(64, photocraft_geom::Rect::new(8, 8, 24, 24));
+            app.ui.tool = Tool::Move;
+            if smart {
+                app.session.execute("layer.smartObjects.convertToSmartObject", json!({})).unwrap();
+                app.sync_views();
+            }
+            let mut h = egui_kittest::Harness::builder().with_size(vec2(1200.0, 800.0)).with_max_steps(64).build_eframe(move |cc| {
+                PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+                app
+            });
+            h.run_steps(4);
+            let ctx = h.ctx.clone();
+            begin_placed(h.state_mut(), &ctx).unwrap();
+            let quad = corners([16.0, 16.0, 48.0, 48.0]);
+            h.state_mut().ui.transform.as_mut().unwrap().quad = quad;
+            h.run_steps(2);
+            let layer = h.state().session.active().unwrap().active_layer.unwrap();
+            for visible in [false, true] {
+                h.state_mut().run("layer.setProps", json!({"layer": layer.0, "visible": visible})).unwrap();
+                h.run_steps(2);
+                assert_eq!(h.state().ui.transform.as_ref().unwrap().quad, quad, "visibility changed pending resize, smart={smart}");
+                assert_eq!(h.state().transform_preview.as_ref().unwrap().opacity, if visible { 1.0 } else { 0.0 });
+            }
+            commit(h.state_mut());
+            h.run_steps(4);
+            assert!(h.state().ui.transform.is_none(), "commit must finish");
+            for visible in [true, false, true] {
+                h.state_mut().run("layer.setProps", json!({"layer": layer.0, "visible": visible})).unwrap();
+                h.run_steps(2);
+                let st = h.state().session.active().unwrap();
+                let bounds = photocraft_engine::transform_cmds::transform_frame(&st.doc, st.doc.layer(layer).unwrap());
+                assert_eq!(bounds, photocraft_geom::Rect::new(16, 16, 48, 48), "visibility changed committed resize, smart={smart}");
+            }
+        }
+    }
+
     /// #1384: the Layers panel's opacity, fill, visibility and blend edits to the moving layer
     /// and to the others show while the box is open, and survive the commit.
     #[test]
