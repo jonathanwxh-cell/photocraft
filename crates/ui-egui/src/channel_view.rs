@@ -637,6 +637,47 @@ mod tests {
     }
 
     #[test]
+    fn solo_spot_channel_reads_full_ink_as_black() {
+        for mode in ["rgb", "cmyk"] {
+            for depth in [8, 16, 32] {
+                let mut s = Session::new();
+                s.execute("file.new", json!({"width": 8, "height": 4, "mode": mode, "depth": depth})).unwrap();
+                s.execute("channel.newSpot", json!({"name": "Blue ink", "color": "#0000ff", "solidity": 100, "fromSelection": false})).unwrap();
+                let bounds = s.active().unwrap().doc.bounds();
+                let coverage: Vec<f32> = (0..32).map(|i| [0.0, 0.25, 0.5, 1.0][i % 4]).collect();
+                s.active_mut().unwrap().doc.channels[0].surface.write_region(bounds, &coverage);
+                s.execute("channel.setVisible", json!({"channel": "composite", "visible": false})).unwrap();
+                let st = s.active().unwrap();
+                for factor in [1, 2] {
+                    for in_color in [false, true] {
+                        let pixels = render(&st.doc, &st.channel_view, bounds, factor, in_color, st.active_layer).unwrap();
+                        let stored = sample(&st.doc.channels[0].surface, bounds, factor);
+                        for (pixel, ink) in pixels.iter().zip(stored) {
+                            assert_eq!(*pixel, Color32::from_gray(q(1.0 - ink)), "{mode}/{depth}, factor {factor}: full ink must be dark");
+                        }
+                    }
+                }
+                // The displayed inversion is not a mutation of the stored ink coverage.
+                assert_eq!(st.doc.channels[0].surface.sample_channel(3, 0, 0), 1.0);
+                assert_eq!(st.doc.channels[0].surface.sample_channel(0, 0, 0), 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn solo_alpha_keeps_white_coverage_when_spot_metadata_is_removed() {
+        let mut s = session();
+        s.execute("channel.newSpot", json!({"color": "#0000ff", "fromSelection": false})).unwrap();
+        let bounds = s.active().unwrap().doc.bounds();
+        s.active_mut().unwrap().doc.channels[0].surface.fill_rect(bounds, &[1.0]);
+        s.active_mut().unwrap().doc.channels[0].spot = None;
+        s.execute("channel.setVisible", json!({"channel": "composite", "visible": false})).unwrap();
+        let st = s.active().unwrap();
+        let pixels = render(&st.doc, &st.channel_view, bounds, 1, false, st.active_layer).unwrap();
+        assert!(pixels.iter().all(|pixel| *pixel == Color32::WHITE), "alpha coverage retains its ordinary polarity");
+    }
+
+    #[test]
     fn solo_alpha_is_grayscale_and_colour_channels_split() {
         let mut s = session();
         s.execute("edit.fill", json!({"color": "#ff8000"})).unwrap();
