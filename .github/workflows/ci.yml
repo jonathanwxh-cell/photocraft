@@ -1,32 +1,12 @@
-name: Cineon row padding baseline
+name: Cineon independent padding oracle
 on: workflow_dispatch
 permissions:
   contents: read
-concurrency:
-  group: verify-cineon-padding
-  cancel-in-progress: false
-env:
-  CARGO_INCREMENTAL: "0"
-  CARGO_PROFILE_DEV_DEBUG: "0"
 jobs:
-  baseline:
+  oracle:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: false
-      - name: Existing DPX orientation control
-        run: cargo test -p photocraft-codecs --lib orientation_codes_map_to_exif -- --nocapture
-      - name: Require intended Cineon baseline failure
-        run: |
-          set +e
-          cargo test -p photocraft-codecs --lib cineon_declared_scanline_padding_keeps_pixel_rows -- --nocapture > /tmp/cineon-baseline.log 2>&1
-          result=$?
-          set -e
-          cat /tmp/cineon-baseline.log
-          test "$result" -eq 101
-          grep -q 'Cineon row padding 4 must not become pixels' /tmp/cineon-baseline.log
-          grep -q 'test result: FAILED' /tmp/cineon-baseline.log
+      - run: python -m pip install OpenImageIO==3.1.6.1
+      - run: python .github/cineon_oracle.py
