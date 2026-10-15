@@ -32,4 +32,5 @@ jobs:
       - name: Clipboard regression tests
         run: cargo test -p photocraft-ui-egui --locked --lib 'clipboard_tests::'
       - name: Native clipboard service tests
-        run: cargo test -p photocraft --locked --bin photocraft services::tests::
+        run: |
+          cargo test -p photocraft --locked --bin photocraft services::tests::
