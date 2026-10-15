@@ -33,19 +33,6 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
           vulkaninfo --summary
-      - name: Confirm centred-square rounding regression on previous candidate
-        run: |
-          cp crates/ui-egui/src/canvas.rs /tmp/fixed-canvas.rs
-          git show a498c671:crates/ui-egui/src/canvas.rs > crates/ui-egui/src/canvas.rs
-          set +e
-          cargo test -p photocraft-ui-egui --lib centred_fixed_ratio_square_pixel_snapping_stays_inside_canvas -- --nocapture > /tmp/rounding-baseline.log 2>&1
-          result=$?
-          set -e
-          cp /tmp/fixed-canvas.rs crates/ui-egui/src/canvas.rs
-          cat /tmp/rounding-baseline.log
-          test "$result" -eq 101
-          grep -q 'pixel-snapped centred square escaped canvas' /tmp/rounding-baseline.log
-          grep -q 'test result: FAILED' /tmp/rounding-baseline.log
       - name: Pointer regression
         run: cargo test -p photocraft-ui-egui --lib fixed_ratio_marquee_started_outside_canvas_keeps_ratio -- --nocapture
       - name: Full UI crate
