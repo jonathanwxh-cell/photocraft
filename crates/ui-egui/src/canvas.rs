@@ -282,8 +282,10 @@ fn bounded_ratio_corners(start: [f64; 2], end: [f64; 2], size: [f64; 2], ratio: 
         scale = scale.min(room / ratio[axis]);
     }
     let extent = [direction[0] * scale * ratio[0], direction[1] * scale * ratio[1]];
-    let end = [start[0] + extent[0], start[1] + extent[1]];
-    if centred { ([start[0] - extent[0], start[1] - extent[1]], end) } else { (start, end) }
+    // Roundoff at an exact boundary must not become an extra pixel when floor/ceil is applied.
+    let bound = |p: [f64; 2]| [p[0].clamp(0.0, size[0]), p[1].clamp(0.0, size[1])];
+    let end = bound([start[0] + extent[0], start[1] + extent[1]]);
+    if centred { (bound([start[0] - extent[0], start[1] - extent[1]]), end) } else { (start, end) }
 }
 
 /// The pixel rectangle `[x0, y0, x1, y1]` a marquee between two corners selects.
@@ -8615,14 +8617,14 @@ mod fixed_ratio_bounds_tests {
 
     #[test]
     fn ratio_geometry_fits_edges_and_centred_drags() {
-        for ratio in [[16.0, 9.0], [9.0, 16.0], [1.0, 1.0]] {
-            for start in [[-40.0, -30.0], [440.0, 330.0], [200.0, 150.0], [20.25, 30.5]] {
+        for ratio in [[16.0, 9.0], [9.0, 16.0], [1.0, 1.0], [52.548122687311576, 9.0]] {
+            for start in [[-40.0, -30.0], [440.0, 330.0], [200.0, 150.0], [20.25, 30.5], [54.80250739935912, 100.0]] {
                 for end in [[500.0, 400.0], [-100.0, -100.0], [300.0, 50.0]] {
                     for centred in [false, true] {
                         let (a, b) = bounded_ratio_corners(start, end, [400.0, 300.0], ratio, centred);
                         for point in [a, b] {
-                            assert!(point[0] >= -1e-10 && point[0] <= 400.0 + 1e-10, "{point:?}");
-                            assert!(point[1] >= -1e-10 && point[1] <= 300.0 + 1e-10, "{point:?}");
+                            assert!(point[0] >= 0.0 && point[0] <= 400.0, "{point:?}");
+                            assert!(point[1] >= 0.0 && point[1] <= 300.0, "{point:?}");
                         }
                         let error = ((b[0] - a[0]).abs() * ratio[1] - (b[1] - a[1]).abs() * ratio[0]).abs();
                         assert!(error < 1e-8, "{a:?} -> {b:?} at {ratio:?}");
