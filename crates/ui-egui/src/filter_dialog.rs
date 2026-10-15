@@ -2415,4 +2415,35 @@ mod tests {
         assert!(px(2)[1] > 0.5, "near the point: shifted to green {:?}", px(2));
         assert!(px(38)[0] > 0.9 && px(38)[1] < 0.1, "far away: still red {:?}", px(38));
     }
+    /// Run alone with HOME set to an isolated runner directory before starting the process.
+    #[test]
+    #[ignore = "requires an isolated Linux profile directory"]
+    fn installed_working_profile_is_selectable_6323() {
+        use egui_kittest::Harness;
+        use egui_kittest::kittest::Queryable;
+        assert!(cfg!(target_os = "linux"));
+        let home = std::env::var("PHOTOCRAFT_PROFILE_TEST_HOME").expect("isolated profile home");
+        assert_eq!(std::env::var("HOME").unwrap(), home);
+        let dir = std::path::Path::new(&home).join(".local/share/icc");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("working-6323.icc");
+        let mut profile = photocraft_cms::Builtin::Srgb.profile();
+        profile.description = "Installed working RGB regression 6323".into();
+        std::fs::write(&path, profile.with_encoded_bytes().to_bytes().as_slice()).unwrap();
+        let installed = photocraft_engine::installed_profiles::installed();
+        assert!(installed.iter().any(|p| p.description == "Installed working RGB regression 6323"), "fixture is discovered before opening the dialog");
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let mut h = Harness::builder().with_size(egui::vec2(1000.0, 1000.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), &mut app);
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+        let id = open(h.state_mut(), "edit.colorSettings").unwrap();
+        h.run_steps(3);
+        h.get_by_label(&choice_label("srgb")).click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Installed working RGB regression 6323").is_some(), "installed RGB profile must appear in working-space menu");
+        h.get_by_label("Installed working RGB regression 6323").click();
+        h.run_steps(2);
+        assert_eq!(h.state().ui.dialogs.iter().find(|d| d.id == id).unwrap().fields["workingRgb"], path.to_string_lossy().as_ref());
+        crate::dialogs::confirm(h.state_mut(), id).unwrap();
+        assert_eq!(h.state().session.color.settings.working_rgb, path.to_string_lossy().as_ref());
+    }
 }
