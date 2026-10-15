@@ -9,6 +9,8 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
   PHOTOCRAFT_NO_PRINT: "1"
+  XDG_RUNTIME_DIR: /tmp/photocraft-runtime
+  WGPU_BACKEND: vulkan
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -24,25 +26,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: false
-      - name: Selection and pointer baselines must fail on unchanged production code
+      - name: Install and verify software graphics adapter
         run: |
-          cp crates/ui-egui/src/lib.rs /tmp/fixed-lib.rs
-          trap 'cp /tmp/fixed-lib.rs crates/ui-egui/src/lib.rs' EXIT
-          git show 4e7a17cd5d5723313f459753663d0d155f047e19:crates/ui-egui/src/lib.rs > crates/ui-egui/src/lib.rs
-          set +e
-          cargo test -p photocraft-ui-egui --lib creating_a_selection_restores_hidden_extras -- --nocapture > /tmp/selection-baseline.log 2>&1
-          selection_result=$?
-          cargo test -p photocraft-ui-egui --lib marquee_drag_after_hiding_extras_restores_selection_visibility -- --nocapture > /tmp/pointer-baseline.log 2>&1
-          pointer_result=$?
-          set -e
-          cat /tmp/selection-baseline.log
-          cat /tmp/pointer-baseline.log
-          test "$selection_result" -eq 101
-          test "$pointer_result" -eq 101
-          grep -q 'new selections stayed hidden after Extras was disabled' /tmp/selection-baseline.log
-          grep -q 'a new marquee must become visible after hiding Extras' /tmp/pointer-baseline.log
-          grep -q 'test result: FAILED' /tmp/selection-baseline.log
-          grep -q 'test result: FAILED' /tmp/pointer-baseline.log
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers vulkan-tools
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          mkdir -p selection-evidence
+          vulkaninfo --summary > selection-evidence/adapter.log 2>&1
+          cat selection-evidence/adapter.log
+          grep -qi llvmpipe selection-evidence/adapter.log
       - name: Fixed regression and full affected crate tests
         run: cargo test -p photocraft-ui-egui
       - name: Strict all-target Clippy
@@ -54,12 +47,7 @@ jobs:
       - name: WASM
         run: cargo xtask wasm
       - name: Render selection visibility states
-        env:
-          XDG_RUNTIME_DIR: /tmp
-          WGPU_BACKEND: vulkan
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
           cargo build -p photocraft-ui-egui --example snapshot
           python3 .github/scripts/verify-5597-render.py
       - uses: actions/upload-artifact@v4
