@@ -8,5 +8,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - run: python -m pip install OpenImageIO==3.1.6.1
+      - run: python -m pip install OpenImageIO==3.1.18.1
       - run: python .github/cineon_oracle.py
+
