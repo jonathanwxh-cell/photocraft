@@ -20,7 +20,7 @@ fn reported_smart_filters_are_live_on_import() {
     for f in &filters {
         println!("filter: {} id={:?} name={:?}", f.command, f.params.get("filterID"), f.params.get("name"));
     }
-    for command in ["filter.sharpen.sharpen", "filter.noise.dustAndScratches"] {
+    for command in ["filter.sharpen.sharpen"] {
         assert!(filters.iter().any(|f| f.command == command), "reported smart filter remains unsupported: {command}");
     }
 }

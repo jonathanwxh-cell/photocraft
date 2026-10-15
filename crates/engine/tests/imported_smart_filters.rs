@@ -22,14 +22,11 @@ fn pattern(depth: u64, seed: i32) -> Session {
 }
 
 #[test]
-fn imported_sharpen_and_dust_filters_apply_after_replacing_contents() {
+fn imported_sharpen_applies_after_replacing_contents() {
     for depth in [8, 16, 32] {
-        for (command, params, changes_pixels) in [
-            ("filter.sharpen.sharpen", json!({}), true),
-            ("filter.noise.dustAndScratches", json!({"radius": 2, "threshold": 17}), true),
-            // At the maximum threshold no sample differs enough from its median to change.
-            ("filter.noise.dustAndScratches", json!({"radius": 2, "threshold": 255}), false),
-        ] {
+        {
+            let command = "filter.sharpen.sharpen";
+            let params = json!({});
             let mut direct = pattern(depth, 0);
             let original_id = LayerId(direct.execute("layer.smartObjects.convertToSmartObject", json!({})).unwrap()["layer"].as_u64().unwrap());
             direct.execute(command, params).unwrap();
@@ -62,9 +59,8 @@ fn imported_sharpen_and_dust_filters_apply_after_replacing_contents() {
             }
             imported.execute("layer.smartFilter.disableSmartFilters", json!({"layer": imported_id.0, "enabled": false})).unwrap();
             let unfiltered = photocraft_compose::flatten(&imported.active().unwrap().doc).px;
-            assert_eq!(
+            assert!(
                 actual.iter().zip(&unfiltered).any(|(a, b)| (a[0] - b[0]).abs() > 0.01),
-                changes_pixels,
                 "{command} must respect its settings on replacement pixels at depth {depth}"
             );
         }
