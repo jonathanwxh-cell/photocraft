@@ -1049,6 +1049,53 @@ mod tests {
         SmartFilter { command: command.into(), params, blend: BlendMode::Normal, opacity: 1.0, visible: true }
     }
 
+    /// #6267: supported engine filters must not become silent pass-throughs on PSD import.
+    #[test]
+    fn reported_smart_filter_descriptors_keep_settings_and_round_trip() {
+        let hue = Descriptor::new("HStr").with("Clrz", Value::Boolean(false)).with(
+            "Adjs",
+            Value::List(vec![Value::Descriptor(
+                Descriptor::new("Hst2").with("Hue ", Value::Integer(25)).with("Strt", Value::Integer(-30)).with("Lght", Value::Integer(12)),
+            )]),
+        );
+        // Sharpen has no Fltr; Dust & Scratches uses integer radius and threshold, as in the
+        // pinned ag-psd descriptor schema. Hue/Saturation uses PhotoCraft's ATN descriptor
+        // representation here; this synthetic case is not a Photoshop smart-filter oracle.
+        let cases = [
+            ("Shrp", None, "filter.sharpen.sharpen", json!({})),
+            (
+                "DstS",
+                Some(Descriptor::new("DstS").with("Rds ", Value::Integer(5)).with("Thsh", Value::Integer(17))),
+                "filter.noise.dustAndScratches",
+                json!({"radius": 5, "threshold": 17}),
+            ),
+            ("HStr", Some(hue), "image.adjustments.hueSaturation", json!({"colorize": false, "hue": 25, "saturation": -30, "lightness": 12})),
+        ];
+        for (class, descriptor, command, params) in cases {
+            let mut item = Descriptor::new("filterFX")
+                .with("Nm  ", Value::Text(UnicodeString::new_nul(class)))
+                .with("filterID", Value::Integer(code(class.as_bytes().try_into().unwrap())))
+                .with(
+                    "blendOptions",
+                    blend_options(&SmartFilter { command: command.into(), params: params.clone(), blend: BlendMode::Multiply, opacity: 0.6, visible: false }),
+                )
+                .with("enab", Value::Boolean(false))
+                .with("hasoptions", Value::Boolean(descriptor.is_some()));
+            if let Some(d) = descriptor {
+                item = item.with("Fltr", Value::Descriptor(d));
+            }
+            let imported = filter_from_item(&item);
+            assert_eq!(imported.command, command, "reported descriptor remains unsupported: {class}");
+            assert_eq!(imported.params, params, "settings for {class}");
+            assert_eq!(imported.blend, BlendMode::Multiply);
+            assert!((imported.opacity - 0.6).abs() < 1e-6);
+            assert!(!imported.visible);
+            let written = item_for_filter(&imported).unwrap();
+            assert_eq!(filter_from_item(&written), imported, "round trip for {class}");
+            assert_eq!(written.get("Fltr").is_some(), class != "Shrp");
+        }
+    }
+
     #[test]
     fn modelled_filters_round_trip() {
         let filters = vec![
