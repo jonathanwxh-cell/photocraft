@@ -269,6 +269,9 @@ fn known_params(class: &str, f: Option<&Descriptor>) -> Option<(&'static str, J)
         (_, None) => return None,
         ("GsnB" | "boxblur" | "Mdn " | "HghP" | "Mxm " | "Mnm ", Some(f)) => json!({"radius": px(f, "Rds ")?}),
         ("DstS", Some(f)) => {
+            if f.items.iter().any(|(key, _)| !key.is("Rds ") && !key.is("Thsh")) {
+                return None;
+            }
             let (radius, threshold) = (int(f, "Rds ")?, int(f, "Thsh")?);
             if !(1..=500).contains(&radius) || !(0..=255).contains(&threshold) {
                 return None;
@@ -597,7 +600,11 @@ fn fltr_for(k: &Known, p: &J) -> Result<Option<Descriptor>, String> {
             if p.as_object().is_some_and(|o| o.keys().any(|k| !is_meta(k) && !["radius", "threshold"].contains(&k.as_str()))) {
                 return Err("Dust & Scratches has an unsupported PSD setting".into());
             }
-            let (radius, threshold) = (pf(p, "radius", 1.0), pf(p, "threshold", 0.0));
+            let number = |key: &str, default: f64| match p.get(key) {
+                None => Ok(default),
+                Some(v) => v.as_f64().filter(|v| v.is_finite()).ok_or("Dust & Scratches settings must be finite numbers"),
+            };
+            let (radius, threshold) = (number("radius", 1.0)?, number("threshold", 0.0)?);
             if radius.fract() != 0.0 || threshold.fract() != 0.0 || !(1.0..=500.0).contains(&radius) || !(0.0..=255.0).contains(&threshold) {
                 return Err("Dust & Scratches PSD settings must be whole numbers in range".into());
             }
@@ -1119,13 +1126,19 @@ mod tests {
             Descriptor::new("DstS").with("Rds ", Value::Integer(5)),
             Descriptor::new("DstS").with("Rds ", Value::Integer(0)).with("Thsh", Value::Integer(17)),
             Descriptor::new("DstS").with("Rds ", Value::Integer(5)).with("Thsh", Value::Integer(256)),
+            Descriptor::new("DstS").with("Rds ", Value::Integer(5)).with("Thsh", Value::Integer(17)).with("unknownSetting", Value::Integer(1)),
         ] {
-            let item = Descriptor::new("filterFX").with("filterID", Value::Integer(code(b"DstS"))).with("Fltr", Value::Descriptor(fltr));
+            let item = Descriptor::new("filterFX")
+                .with("filterID", Value::Integer(code(b"DstS")))
+                .with("blendOptions", blend_options(&sf("", json!({}))))
+                .with("enab", Value::Boolean(true))
+                .with("Fltr", Value::Descriptor(fltr));
             let f = filter_from_item(&item);
             assert_eq!(f.command, UNSUPPORTED_FILTER);
             assert_eq!(filter_from_item(&item_for_filter(&f).unwrap()).params, f.params);
         }
         assert!(item_for_filter(&sf("filter.noise.dustAndScratches", json!({"radius": 2.5, "threshold": 0}))).is_err());
+        assert!(item_for_filter(&sf("filter.noise.dustAndScratches", json!({"radius": "five"}))).is_err());
         assert!(item_for_filter(&sf("filter.sharpen.sharpen", json!({"amount": 100}))).is_err());
     }
 
