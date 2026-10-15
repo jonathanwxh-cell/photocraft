@@ -2427,7 +2427,7 @@ mod tests {
         let dir = std::path::Path::new(&home).join(".local/share/icc");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("working-6323.icc");
-        let mut profile = photocraft_cms::Builtin::Srgb.profile();
+        let mut profile = photocraft_cms::Builtin::Srgb.profile().clone();
         profile.description = "Installed working RGB regression 6323".into();
         std::fs::write(&path, profile.with_encoded_bytes().to_bytes().as_slice()).unwrap();
         let installed = photocraft_engine::installed_profiles::installed();
