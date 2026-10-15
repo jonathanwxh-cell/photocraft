@@ -1,4 +1,4 @@
-name: Font metadata verification
+name: Font metadata corpus verification
 on: workflow_dispatch
 permissions:
   contents: read
@@ -8,25 +8,23 @@ concurrency:
 env:
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  PHOTOCRAFT_NO_PRINT: "1"
 jobs:
-  baseline:
+  corpus:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
+          key: corpus
           save-if: false
-      - name: Format
-        run: cargo fmt --all -- --check
-      - name: Text tests including metadata regressions
-        run: cargo test -p photocraft-text
-      - name: Strict all-target text Clippy
-        run: cargo clippy -p photocraft-text --all-targets -- -D warnings
-      - name: Dependency layers
-        run: cargo xtask layers
-      - name: L0-L6 WASM
-        run: cargo xtask wasm
+      - uses: actions/cache/restore@v4
+        with:
+          path: corpus/
+          key: corpus-${{ hashFiles('xtask/src/corpus_pins.rs', 'xtask/*.sha256') }}
+      - name: Full pinned corpus gate
+        run: cargo xtask test-corpus
