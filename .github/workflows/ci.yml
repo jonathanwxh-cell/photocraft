@@ -8,24 +8,55 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   PHOTOCRAFT_NO_PRINT: '1'
 jobs:
-  compose:
+  corpus:
+    # Real-file corpus tests (cargo feature `corpus`), on every PR and on main. The corpora are
+    # pinned in xtask/src/corpus_pins.rs and sha256-verified (xtask/*.sha256) after both a cache
+    # restore and a download; a missing corpus fails the tests. The cache key changes only when a
+    # pin or manifest does, so normally this restores in seconds (fork PRs read the base cache).
+    name: corpus tests
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    env:
+      # test-corpus builds with --release, but here without the release profile's thin LTO and
+      # single codegen unit: they ran LTO over the dependency graph for each of the ~95 corpus test
+      # binaries, so building took 23.5 of the job's 37 minutes while the tests ran for 1.5.
+      # Turning them off builds 2.7x faster; the code under test is the same.
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: false
-      - run: cargo fmt --all -- --check
-      - run: cargo test -p photocraft-compose --locked
-      - run: cargo clippy -p photocraft-compose --all-targets --locked -- -D warnings
-      - run: cargo xtask layers
-  evidence:
+          key: corpus
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+      - name: Restore test corpora
+        uses: actions/cache@v4
+        with:
+          path: corpus/
+          key: corpus-${{ hashFiles('xtask/src/corpus_pins.rs', 'xtask/*.sha256') }}
+      - name: Fetch and verify corpora
+        run: cargo xtask corpus --all
+      - name: Corpus tests
+        run: cargo xtask test-corpus
+
+  wasm:
+    name: wasm32 check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+      - name: Check wasm-safe crates
+        run: cargo xtask wasm
+
+  performance:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -35,30 +66,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: false
-      - name: Before and after on the same runner
-        shell: bash
+      - name: System dependencies
         run: |
-          set -euo pipefail
-          mkdir -p evidence
-          cp crates/compose/src/effects.rs /tmp/fixed-effects.rs
-          git show df055f3dcb0bb0312af97548ee6c6f9628f21dd7:crates/compose/src/effects.rs > crates/compose/src/effects.rs
-          cat .github/noise-evidence.rs >> crates/compose/src/effects.rs
-          NOISE_LABEL=before cargo test -p photocraft-compose --release --lib --locked noise_cloud_evidence -- --ignored --nocapture 2>&1 | tee evidence/before.log
-          cp /tmp/fixed-effects.rs crates/compose/src/effects.rs
-          cat .github/noise-evidence.rs >> crates/compose/src/effects.rs
-          NOISE_LABEL=after cargo test -p photocraft-compose --release --lib --locked noise_cloud_evidence -- --ignored --nocapture 2>&1 | tee evidence/after.log
-          cp /tmp/fixed-effects.rs crates/compose/src/effects.rs
-          python3 -m pip install Pillow
-          python3 -c "from PIL import Image; from pathlib import Path; [Image.open(p).resize((768,512)).save(p.with_suffix('.png')) for p in Path('evidence').glob('*.ppm')]"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev libvulkan1 mesa-vulkan-drivers
+      - run: cargo xtask perf --quick
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: noise-before-after
-          path: evidence/
+          name: quick-performance
+          path: target/perf/
           retention-days: 7
-          if-no-files-found: error
