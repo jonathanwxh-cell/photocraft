@@ -2445,7 +2445,8 @@ mod tests {
             let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
             let mut h = Harness::builder().with_size(egui::vec2(1000.0, 1000.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), &mut app);
             PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
-            let id = open(h.state_mut(), "edit.colorSettings").unwrap();
+            let ctx = h.ctx.clone();
+            let id = crate::menus::invoke(h.state_mut(), &ctx, "edit.colorSettings", json!({})).unwrap()["dialog"].as_u64().unwrap();
             h.run_steps(3);
             h.get_by_label(&choice_label(builtin.id())).click();
             h.run_steps(2);
@@ -2461,6 +2462,21 @@ mod tests {
             crate::dialogs::confirm(h.state_mut(), id).unwrap();
             let settings = h.state_mut().session.execute("edit.colorSettings", json!({})).unwrap();
             assert_eq!(settings["settings"][key], path.to_string_lossy().as_ref());
+            let stored = h.state().session.prefs_to_json();
+            let mut restored = photocraft_engine::Session::new();
+            restored.load_prefs_json(&stored).unwrap();
+            let restored_settings = restored.execute("edit.colorSettings", json!({})).unwrap();
+            assert_eq!(restored_settings["settings"][key], path.to_string_lossy().as_ref());
+            let reopened = crate::menus::invoke(h.state_mut(), &ctx, "edit.colorSettings", json!({})).unwrap()["dialog"].as_u64().unwrap();
+            h.run_steps(3);
+            assert!(h.query_by_label(name).is_some(), "reopened menu shows installed profile description");
+            h.get_by_label(name).click();
+            h.run_steps(2);
+            h.get_by_label(&choice_label(builtin.id())).click();
+            h.run_steps(2);
+            crate::dialogs::cancel(h.state_mut(), reopened).unwrap();
+            let after_cancel = h.state_mut().session.execute("edit.colorSettings", json!({})).unwrap();
+            assert_eq!(after_cancel["settings"][key], path.to_string_lossy().as_ref(), "cancel does not change the working profile");
         }
     }
 }
