@@ -29,6 +29,16 @@ jobs:
         with:
           path: corpus/
           key: corpus-${{ hashFiles('xtask/src/corpus_pins.rs', 'xtask/*.sha256') }}
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Text crate tests including merged regressions
+        run: cargo test -p photocraft-text --locked
+      - name: Strict text Clippy
+        run: cargo clippy -p photocraft-text --all-targets --locked -- -D warnings
+      - name: Layer boundaries
+        run: cargo xtask layers
+      - name: L0-L6 WASM
+        run: cargo xtask wasm
       - name: Full pinned corpus gate
         run: cargo xtask test-corpus
   windows:
