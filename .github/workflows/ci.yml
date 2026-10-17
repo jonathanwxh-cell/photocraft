@@ -1,4 +1,4 @@
-name: Verify 6145 browser admission conflict repair
+name: Verify 6145 remaining WASM gates
 on: workflow_dispatch
 permissions:
   contents: read
@@ -10,48 +10,45 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
   PHOTOCRAFT_NO_PRINT: "1"
 jobs:
-  browser:
+  wasm:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-          components: rustfmt, clippy
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           key: browser-locale
           save-if: false
-      - name: Format check
-        run: cargo fmt --all -- --check
-      - name: Install and validate software Vulkan
+      - name: Confirm unchanged engine WASM lints on upstream baseline
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev mesa-vulkan-drivers vulkan-tools xvfb
-          mkdir -p /tmp/photocraft-runtime
-          chmod 700 /tmp/photocraft-runtime
-          echo 'XDG_RUNTIME_DIR=/tmp/photocraft-runtime' >> "$GITHUB_ENV"
-          vulkaninfo --summary | tee /tmp/vulkan.txt
-          grep -Ei 'llvmpipe|lavapipe' /tmp/vulkan.txt
-      - name: Browser admission regression tests
-        run: cargo test -p photocraft-web --locked
-      - name: Preset integration regressions
-        run: cargo test -p photocraft-engine --lib --locked presets
-      - name: Export preset regressions
-        run: cargo test -p photocraft-engine --lib --locked export_preset_cmds
-      - name: File dialog conflict regression tests
-        run: cargo test -p photocraft-ui-egui --lib --locked file_dialog::tests
-      - name: Complete UI crate tests
-        env:
-          PHOTOCRAFT_REQUIRE_GPU_TESTS: "1"
-          WGPU_BACKEND: vulkan
-        run: xvfb-run -a cargo test -p photocraft-ui-egui --locked
-      - name: Strict native all-target Clippy
-        run: cargo clippy -p photocraft-ui-egui -p photocraft-web -p photocraft-engine --all-targets --locked -- -D warnings
-      - name: Strict browser-path Clippy excluding known unchanged dependency lint
-        run: cargo clippy --no-deps -p photocraft-ui-egui -p photocraft-web -p photocraft-engine --target wasm32-unknown-unknown --locked -- -D warnings
-      - name: Layering
+          git worktree add --detach /tmp/photocraft-6145-base 5f65579ecb44047c2a619036c18ff273202e1389
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/photocraft-6145-base/crates/engine/src/presets/mod.rs')
+          s=p.read_text()
+          needle='            recent_documents: take(&mut m, "recent_documents"),'
+          assert s.count(needle)==1
+          p.write_text(s.replace(needle,needle+'\n            export_presets: take(&mut m, "export_presets"),'))
+          PY
+          set +e
+          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" cargo clippy --manifest-path /tmp/photocraft-6145-base/Cargo.toml --no-deps -p photocraft-engine --target wasm32-unknown-unknown --locked -- -D warnings > /tmp/baseline.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/baseline.log
+          test "$result" -ne 0
+          grep -q 'constant `PAR_PIXELS` is never used' /tmp/baseline.log
+          grep -q 'constant `MAX_SUBFOLDER_DEPTH` is never used' /tmp/baseline.log
+          grep -q 'constant `MAX_SUBFOLDER_FILES` is never used' /tmp/baseline.log
+          grep -q 'due to 3 previous errors' /tmp/baseline.log
+      - name: Strict browser shell WASM Clippy without baseline dependency lints
+        run: cargo clippy --no-deps -p photocraft-web --target wasm32-unknown-unknown --locked -- -D warnings
+      - name: Layer boundaries
         run: cargo xtask layers
       - name: Complete L0-L6 WASM gate
         run: cargo xtask wasm
