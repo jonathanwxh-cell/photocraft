@@ -33,6 +33,12 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Text crate tests including merged regressions
         run: cargo test -p photocraft-text --locked
+      - name: Preset loader regressions
+        run: cargo test -p photocraft-engine --lib --locked presets
+      - name: Export preset round trip
+        run: cargo test -p photocraft-engine --lib --locked export_preset_cmds
+      - name: Strict engine Clippy
+        run: cargo clippy -p photocraft-engine --all-targets --locked -- -D warnings
       - name: Strict text Clippy
         run: cargo clippy -p photocraft-text --all-targets --locked -- -D warnings
       - name: Layer boundaries
