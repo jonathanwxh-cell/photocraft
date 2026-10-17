@@ -1,4 +1,4 @@
-name: Verify 6145 remaining WASM gates
+name: Verify 6145 platform test compatibility
 on: workflow_dispatch
 permissions:
   contents: read
@@ -10,45 +10,24 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
   PHOTOCRAFT_NO_PRINT: "1"
 jobs:
-  wasm:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+  algo:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          key: browser-locale
           save-if: false
-      - name: Confirm unchanged engine WASM lints on upstream baseline
-        run: |
-          git worktree add --detach /tmp/photocraft-6145-base 5f65579ecb44047c2a619036c18ff273202e1389
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('/tmp/photocraft-6145-base/crates/engine/src/presets/mod.rs')
-          s=p.read_text()
-          needle='            recent_documents: take(&mut m, "recent_documents"),'
-          assert s.count(needle)==1
-          p.write_text(s.replace(needle,needle+'\n            export_presets: take(&mut m, "export_presets"),'))
-          PY
-          set +e
-          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" cargo clippy --manifest-path /tmp/photocraft-6145-base/Cargo.toml --no-deps -p photocraft-engine --target wasm32-unknown-unknown --locked -- -D warnings > /tmp/baseline.log 2>&1
-          result=$?
-          set -e
-          cat /tmp/baseline.log
-          test "$result" -ne 0
-          grep -q 'constant `PAR_PIXELS` is never used' /tmp/baseline.log
-          grep -q 'constant `MAX_SUBFOLDER_DEPTH` is never used' /tmp/baseline.log
-          grep -q 'constant `MAX_SUBFOLDER_FILES` is never used' /tmp/baseline.log
-          grep -q 'due to 3 previous errors' /tmp/baseline.log
-      - name: Strict browser shell WASM Clippy without baseline dependency lints
-        run: cargo clippy --no-deps -p photocraft-web --target wasm32-unknown-unknown --locked -- -D warnings
-      - name: Layer boundaries
-        run: cargo xtask layers
-      - name: Complete L0-L6 WASM gate
-        run: cargo xtask wasm
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Full algorithm crate tests including panorama regressions
+        run: cargo test -p photocraft-algo --locked
+      - name: Strict algorithm Clippy on all targets
+        run: cargo clippy -p photocraft-algo --all-targets --locked -- -D warnings
