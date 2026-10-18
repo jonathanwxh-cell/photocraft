@@ -23,7 +23,35 @@ jobs:
           save-if: false
       - name: Formatting
         run: cargo fmt --all -- --check
-      - name: Render changed public and private API documentation
-        env:
-          RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
-        run: cargo doc -p photocraft-psd -p photocraft-engine --no-deps --document-private-items --locked
+      - name: Compare parent and revised API documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=2 origin 6506c5ce107413272be2686ae9cae1433a543ff9
+          git checkout --detach 7b4f2b26703d1b335d3b0c7d2c80600829bbd72d
+          cargo doc -p photocraft-psd -p photocraft-engine --no-deps --document-private-items --locked --message-format=json > /tmp/docs-parent.jsonl
+          git checkout --detach 6506c5ce107413272be2686ae9cae1433a543ff9
+          cargo doc -p photocraft-psd -p photocraft-engine --no-deps --document-private-items --locked --message-format=json > /tmp/docs-revised.jsonl
+          python3 - <<'PY'
+          import json
+          from collections import Counter
+          def diagnostics(path):
+              result = Counter()
+              for line in open(path):
+                  record = json.loads(line)
+                  if record.get('reason') != 'compiler-message':
+                      continue
+                  message = record['message']
+                  if message['level'] not in ('warning', 'error'):
+                      continue
+                  files = tuple(sorted({s['file_name'] for s in message['spans']}))
+                  result[(message['level'], message['message'], files)] += 1
+              return result
+          parent = diagnostics('/tmp/docs-parent.jsonl')
+          revised = diagnostics('/tmp/docs-revised.jsonl')
+          print('Parent diagnostics:', parent)
+          print('Revised diagnostics:', revised)
+          added = revised - parent
+          assert not added, f'New documentation diagnostics: {added}'
+          print('Both documentation builds passed; no new warnings.')
+          PY
