@@ -1,4 +1,4 @@
-name: Verify 5493 translation conflict integration
+name: Verify 5493 remaining corpus gate
 on: workflow_dispatch
 permissions:
   contents: read
@@ -8,44 +8,19 @@ concurrency:
 env:
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
   PHOTOCRAFT_NO_PRINT: "1"
 jobs:
-  browser:
+  corpus:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          key: browser-locale
+          key: corpus
           save-if: false
-      - name: Format check
-        run: cargo fmt --all -- --check
-      - name: Install and validate software Vulkan
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev mesa-vulkan-drivers vulkan-tools xvfb
-          mkdir -p /tmp/photocraft-runtime
-          chmod 700 /tmp/photocraft-runtime
-          echo 'XDG_RUNTIME_DIR=/tmp/photocraft-runtime' >> "$GITHUB_ENV"
-          vulkaninfo --summary | tee /tmp/vulkan.txt
-          grep -Ei 'llvmpipe|lavapipe' /tmp/vulkan.txt
-      - name: Full affected parser engine and automation suites
-        run: cargo test -p photocraft-psd -p photocraft-engine -p photocraft-automation --locked
-      - name: Complete UI crate tests
-        env:
-          PHOTOCRAFT_REQUIRE_GPU_TESTS: "1"
-          WGPU_BACKEND: vulkan
-        run: xvfb-run -a cargo test -p photocraft-ui-egui --locked
-      - name: Strict native all-target Clippy
-        run: cargo clippy -p photocraft-ui-egui -p photocraft-psd -p photocraft-engine -p photocraft-automation --all-targets --locked -- -D warnings
-      - name: Layering
-        run: cargo xtask layers
-      - name: Complete L0-L6 WASM gate
-        run: cargo xtask wasm
-      - name: Corpus regression gate
+      - name: Corpus tests with upstream CI release settings
         run: cargo xtask test-corpus
