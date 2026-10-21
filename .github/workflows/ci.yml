@@ -164,7 +164,7 @@ jobs:
           trap restore EXIT
           for file in "${files[@]}"; do git show b097800e78405aeb2068113988898f991e707eb4:"$file" > "$file"; done
           set +e
-          cargo test -p photocraft-engine --lib --locked --features heif -- --exact web_cmds::tests::quick_export_exr_preserves_linear_hdr_and_alpha > baseline-exr.log 2>&1
+          CARGO_TERM_COLOR=never cargo test -p photocraft-engine --lib --locked --features photocraft-io/heif -- --exact web_cmds::tests::quick_export_exr_preserves_linear_hdr_and_alpha > baseline-exr.log 2>&1
           result=$?
           set -e
           cat baseline-exr.log
@@ -172,7 +172,7 @@ jobs:
           grep -q 'quick_export_exr_preserves_linear_hdr_and_alpha .*FAILED' baseline-exr.log
           grep -q 'exr' baseline-exr.log
           restore
-          cargo test -p photocraft-engine --lib --locked --features heif quick_export_exr_preserves_linear_hdr_and_alpha
+          CARGO_TERM_COLOR=never cargo test -p photocraft-engine --lib --locked --features photocraft-io/heif quick_export_exr_preserves_linear_hdr_and_alpha
           git diff --exit-code
       - name: Clippy
         if: matrix.part == 'all' || matrix.part == 'integration'
