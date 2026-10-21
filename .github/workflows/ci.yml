@@ -100,6 +100,8 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: ${{ startsWith(matrix.os, 'windows') && '0' || 'line-tables-only' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
 
       # Unused toolchains in the image (Android SDK, .NET, GHC, CodeQL) are deleted in the
       # background: the space is free before the craft-fonts build needs it, and nothing waits.
@@ -152,6 +154,26 @@ jobs:
         run: cargo fmt --all -- --check
 
       # Keep formatting, strict Clippy, layering and scorecard checks ahead of tests.
+      - name: Prove EXR regression on baseline and repaired source
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(crates/engine/src/prefs.rs crates/engine/src/web_cmds.rs)
+          restore() { git restore --source=HEAD -- "${files[@]}"; }
+          trap restore EXIT
+          for file in "${files[@]}"; do git show b097800e78405aeb2068113988898f991e707eb4:"$file" > "$file"; done
+          set +e
+          cargo test -p photocraft-engine --lib --locked --features heif -- --exact web_cmds::tests::quick_export_exr_preserves_linear_hdr_and_alpha > baseline-exr.log 2>&1
+          result=$?
+          set -e
+          cat baseline-exr.log
+          test "$result" -ne 0
+          grep -q 'quick_export_exr_preserves_linear_hdr_and_alpha .*FAILED' baseline-exr.log
+          grep -q 'exr' baseline-exr.log
+          restore
+          cargo test -p photocraft-engine --lib --locked --features heif quick_export_exr_preserves_linear_hdr_and_alpha
+          git diff --exit-code
       - name: Clippy
         if: matrix.part == 'all' || matrix.part == 'integration'
         run: cargo clippy --workspace --all-targets --locked --features heif -- -D warnings
@@ -169,6 +191,7 @@ jobs:
       # nextest runs the test binaries in parallel (cargo test runs them one at a time), with the
       # GPU tests capped by the `gpu` group in .config/nextest.toml (#2204).
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+        timeout-minutes: 5
         with:
           tool: cargo-nextest@0.9.146
 
@@ -241,6 +264,8 @@ jobs:
         variant: [without heif, with craft-fonts]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
 
       - name: Install Linux system dependencies (egui/winit/rfd)
         run: |
@@ -259,6 +284,7 @@ jobs:
           save-if: false
 
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+        timeout-minutes: 5
         with:
           tool: cargo-nextest@0.9.146
 
@@ -306,6 +332,8 @@ jobs:
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -328,6 +356,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -351,6 +381,8 @@ jobs:
       TRUNK_VERSION: 0.21.14
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -419,6 +451,8 @@ jobs:
           - { crate: format, name: load }
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
