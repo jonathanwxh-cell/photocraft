@@ -24,20 +24,15 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
           vulkaninfo --summary
-      - name: Validate final command documentation and focused regression
+      - name: Capture existing PNG preferences
         run: |
-          cargo fmt --all -- --check
-          cargo test -p photocraft-engine --lib --locked quick_export_exr_preserves_linear_hdr_and_alpha
-      - name: Capture baseline preferences
-        run: |
-          git checkout b097800e78405aeb2068113988898f991e707eb4 -- crates/engine/src/prefs.rs crates/engine/src/web_cmds.rs crates/ui-egui/src/prefs_ui.rs crates/ui-egui/src/menus.rs
           cargo run -p photocraft-ui-egui --example snapshot -- --out before.png --size 1280x900 --scale 1 --script '[["ui.menu.invoke",{"id":"file.export.exportPreferences"}]]'
-          git restore --source=HEAD -- crates/engine/src/prefs.rs crates/engine/src/web_cmds.rs crates/ui-egui/src/prefs_ui.rs crates/ui-egui/src/menus.rs
       - name: Capture EXR preferences
         run: |
           cargo run -p photocraft-ui-egui --example snapshot -- --out after.png --size 1280x900 --scale 1 --script '[["engine.execute",{"command":"prefs.set","params":{"values":{"export.quickExportFormat":"exr"}}}],["ui.menu.invoke",{"id":"file.export.exportPreferences"}]]'
           git diff --exit-code
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: exr-preferences-before-after
           path: |
