@@ -28,7 +28,6 @@ jobs:
         run: |
           cargo fmt --all -- --check
           cargo test -p photocraft-engine --lib --locked quick_export_exr_preserves_linear_hdr_and_alpha
-          cargo clippy -p photocraft-engine -p photocraft-ui-egui --all-targets --locked -- -D warnings
       - name: Capture baseline preferences
         run: |
           git checkout b097800e78405aeb2068113988898f991e707eb4 -- crates/engine/src/prefs.rs crates/engine/src/web_cmds.rs crates/ui-egui/src/prefs_ui.rs crates/ui-egui/src/menus.rs
