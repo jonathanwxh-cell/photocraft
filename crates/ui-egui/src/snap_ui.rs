@@ -458,7 +458,18 @@ fn crop_image(app: &PhotocraftApp, p: [f64; 2], targets: &SnapTargets, tol: f64)
 fn drawn_rect(app: &PhotocraftApp, d: &crate::canvas::Drag) -> Option<[f64; 4]> {
     let last = d.points.last().map_or(d.start, |p| [p[0], p[1]]);
     let (a, b) = match d.tool {
-        Tool::RectMarquee | Tool::EllipseMarquee => crate::canvas::marquee_corners(&app.ui.tool_options, d, last),
+        Tool::RectMarquee | Tool::EllipseMarquee => {
+            let o = &app.ui.tool_options;
+            // The ants show the bounded, pixel-snapped fixed-ratio rectangle. Snapping the raw
+            // corners lets a centre that hangs off the canvas hit a document edge and drag that
+            // preview (#6192).
+            if o.marquee_style == "fixedRatio" && o.marquee_width > 0.0 && o.marquee_height > 0.0 {
+                let [x0, y0, x1, y1] = crate::canvas::marquee_preview_px(app, d)?;
+                ([x0, y0], [x1, y1])
+            } else {
+                crate::canvas::marquee_corners(o, d, last)
+            }
+        }
         Tool::ObjectSelection => (d.start, last),
         t if crate::vector_ui::is_shape_tool(t) => return crate::vector_ui::shape_bounds(&app.ui.tool_options, t, d.start, last, d.live),
         _ => return None,
@@ -884,6 +895,62 @@ mod tests {
             crate::canvas::tool_event(&mut app, ToolEvent::Up { x: 397.0, y: 140.0 }, m);
             let sel = app.session.active().unwrap().doc.selection.as_ref().unwrap().content_bounds();
             assert_eq!((sel.x0, sel.y0, sel.x1, sel.y1), (220, 100, 400, 140));
+        }
+    }
+
+    /// A fixed-ratio marquee that starts off the canvas is already clipped to the image. Space
+    /// must snap that preview: the raw corners' centre (here x = 5) is within the document-edge
+    /// threshold and would shift a rectangle whose left edge is already on x = 0 (#6192).
+    #[test]
+    fn fixed_ratio_reposition_snaps_the_bounded_preview() {
+        for tool in [Tool::RectMarquee, Tool::EllipseMarquee] {
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
+            app.sync_views();
+            app.ui.views[0].zoom = 1.0;
+            app.ui.views[0].fit_pending = false;
+            // Grid lines every 18 px would also sit near this rectangle. The bug is the document edge.
+            app.ui.view.snap_to.grid = false;
+            app.ui.tool = tool;
+            app.ui.tool_options.marquee_style = "fixedRatio".into();
+            app.ui.tool_options.marquee_width = 16.0;
+            app.ui.tool_options.marquee_height = 9.0;
+            let m = egui::Modifiers::NONE;
+            crate::canvas::tool_event(&mut app, ToolEvent::Down { x: -40.0, y: 100.0, pressure: 1.0 }, m);
+            crate::canvas::tool_event(&mut app, ToolEvent::Move { x: 50.0, y: 120.0, pressure: 1.0 }, m);
+            app.drag.as_mut().unwrap().reposition = true;
+            crate::canvas::tool_event(&mut app, ToolEvent::Move { x: 50.0, y: 120.0, pressure: 1.0 }, m);
+            let drag = app.drag.as_ref().unwrap();
+            assert_eq!(drag.start, [-40.0, 100.0], "{tool:?}");
+            assert_eq!(crate::canvas::marquee_preview_px(&app, drag), Some([0.0, 100.0, 50.0, 129.0]), "{tool:?}");
+        }
+    }
+
+    /// Space still snaps a fixed-ratio marquee that fits on the canvas: the edge of the preview
+    /// moves onto the guide, not the raw corner under the pointer.
+    #[test]
+    fn fixed_ratio_reposition_still_snaps_a_bounded_edge() {
+        for tool in [Tool::RectMarquee, Tool::EllipseMarquee] {
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
+            app.sync_views();
+            app.ui.views[0].zoom = 1.0;
+            app.ui.views[0].fit_pending = false;
+            app.ui.view.snap_to.grid = false;
+            app.run("view.newGuide", json!({"orientation": "vertical", "position": 80})).unwrap();
+            app.ui.tool = tool;
+            app.ui.tool_options.marquee_style = "fixedRatio".into();
+            app.ui.tool_options.marquee_width = 16.0;
+            app.ui.tool_options.marquee_height = 9.0;
+            let m = egui::Modifiers::NONE;
+            crate::canvas::tool_event(&mut app, ToolEvent::Down { x: 100.0, y: 100.0, pressure: 1.0 }, m);
+            crate::canvas::tool_event(&mut app, ToolEvent::Move { x: 150.0, y: 120.0, pressure: 1.0 }, m);
+            // Preview is [100, 100, 150, 129]. Its left edge lands 4 px short of the guide.
+            app.drag.as_mut().unwrap().reposition = true;
+            crate::canvas::tool_event(&mut app, ToolEvent::Move { x: 126.0, y: 120.0, pressure: 1.0 }, m);
+            let drag = app.drag.as_ref().unwrap();
+            assert_eq!(drag.start, [80.0, 100.0], "{tool:?}");
+            assert_eq!(crate::canvas::marquee_preview_px(&app, drag), Some([80.0, 100.0, 130.0, 129.0]), "{tool:?}");
         }
     }
 
