@@ -9,7 +9,7 @@
 //! OK runs `filter.liquify` with the same strokes and gets the same field.
 
 use egui::{Align2, Color32, FontId, Pos2, Rect as ERect, Sense, Stroke, TextureHandle, pos2, vec2};
-use photocraft_algo::liquify::{LiquifyField, LiquifyStroke, LiquifyTool, PreviewBlend, ProxyImage, auto_cell};
+use photocraft_algo::liquify::{LiquifyField, LiquifyStroke, LiquifyTool, NativeMaskSamples, PreviewBlend, ProxyImage, auto_cell};
 use photocraft_doc::{DocId, Document, LayerContent, LayerId, LayerMask};
 use photocraft_geom::Rect;
 use photocraft_raster::Surface;
@@ -170,6 +170,8 @@ pub struct LiquifyDialog {
     source: Surface,
     selection: Option<(Surface, LayerMask)>,
     proxy_blend: Vec<PreviewBlend>,
+    /// Filter-mask samples mixed in CMYK or Lab before the preview becomes RGBA.
+    native_mask: Option<NativeMaskSamples>,
     view_blend: Vec<PreviewBlend>,
     out: Vec<[u8; 4]>,
     tex: Option<TextureHandle>,
@@ -372,7 +374,7 @@ impl LiquifyDialog {
     /// Re-renders the dirty proxy pixels into `out` (the texture upload happens in `show`).
     fn render_dirty(&mut self) {
         if let Some(r) = self.dirty {
-            self.proxy.render_blended(&self.field, r, &mut self.out, &self.proxy_blend);
+            self.proxy.render_blended_native(&self.field, r, &mut self.out, &self.proxy_blend, self.native_mask.as_ref());
         }
     }
 
@@ -428,6 +430,7 @@ impl LiquifyDialog {
             return;
         }
         let started = crate::gpu_canvas::now_ms();
+        let unfiltered = self.native_mask.as_ref().and_then(|_| self.selection.as_ref().map(|(surface, _)| surface));
         let rendered = ProxyImage::render_full_resolution_blended(
             &self.source,
             &self.field,
@@ -436,6 +439,7 @@ impl LiquifyDialog {
             &mut self.view_out,
             &mut self.view_source_scratch,
             &self.view_blend,
+            unfiltered,
         );
         if !rendered {
             self.view_bounds = None;
@@ -475,7 +479,7 @@ impl LiquifyDialog {
         let (w, h) = (self.proxy.w, self.proxy.h);
         match (&mut self.tex, self.dirty.take()) {
             (None, _) => {
-                self.proxy.render_blended(&self.field, [0, 0, w, h], &mut self.out, &self.proxy_blend);
+                self.proxy.render_blended_native(&self.field, [0, 0, w, h], &mut self.out, &self.proxy_blend, self.native_mask.as_ref());
                 let img = egui::ColorImage::new([w, h], self.out.iter().map(|p| Color32::from_rgba_premultiplied(p[0], p[1], p[2], p[3])).collect());
                 self.tex = Some(ctx.load_texture("liquify-proxy", img, egui::TextureOptions::LINEAR));
             }
@@ -637,6 +641,7 @@ fn open_on(
     let name = st.doc.layer(layer).map(|l| l.name.clone()).unwrap_or_default();
     let proxy = ProxyImage::new(&surf, canvas, PROXY_SIDE);
     let proxy_blend = preview_blend(selection.as_ref(), canvas, PROXY_SIDE);
+    let native_mask = selection.as_ref().and_then(|(original, _)| NativeMaskSamples::from_proxy(&surf, original, &proxy));
     let out = vec![[0u8; 4]; proxy.w * proxy.h];
     let center = [f64::from(canvas.x0 + canvas.x1) / 2.0, f64::from(canvas.y0 + canvas.y1) / 2.0];
     let mut d = LiquifyDialog {
@@ -654,6 +659,7 @@ fn open_on(
         source: surf,
         selection,
         proxy_blend,
+        native_mask,
         view_blend: Vec::new(),
         out,
         tex: None,
@@ -1484,6 +1490,86 @@ mod tests {
             let canvas = app.session.active().unwrap().doc.bounds();
             assert_eq!(before.read_region(canvas) != after.read_region(canvas), mode == 3, "commit mode {mode}");
         }
+    }
+
+    /// Opening Liquify must not recolour a masked smart object before any stroke. Mask mixing
+    /// happens in the document's own channels; converting each side to RGBA first does not match
+    /// the cached composite for CMYK.
+    #[test]
+    fn opening_masked_smart_liquify_keeps_native_colors_across_formats() {
+        use photocraft_color::{ColorMode, SampleType};
+        let mut failures = Vec::new();
+        for (name, mode, a, b) in [
+            ("rgb", ColorMode::Rgb, vec![0.1, 0.2, 0.3, 1.0], vec![0.9, 0.8, 0.7, 1.0]),
+            ("grayscale", ColorMode::Grayscale, vec![0.1, 1.0], vec![0.9, 1.0]),
+            ("cmyk", ColorMode::Cmyk, vec![0.1, 0.2, 0.3, 0.1, 1.0], vec![0.9, 0.8, 0.7, 0.9, 1.0]),
+        ] {
+            for depth in [8, 16, 32] {
+                for coverage in [0.0, 0.5, 1.0] {
+                    let ctx = egui::Context::default();
+                    let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+                    app.session.execute("file.new", json!({"width": 32, "height": 32, "mode": name, "depth": depth})).unwrap();
+                    app.session.execute("layer.new.layer", json!({})).unwrap();
+                    app.session
+                        .edit("two native colors", |doc, active| {
+                            let surf = doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap();
+                            surf.fill_rect(Rect::new(0, 0, 16, 32), &a);
+                            surf.fill_rect(Rect::new(16, 0, 32, 32), &b);
+                            Ok(())
+                        })
+                        .unwrap();
+                    app.session.execute("layer.smartObjects.convertToSmartObject", json!({})).unwrap();
+                    app.session.execute("filter.blur.gaussianBlur", json!({"radius": 2.0})).unwrap();
+                    app.session
+                        .edit("filter mask coverage", |doc, active| {
+                            let id = active.unwrap();
+                            let LayerContent::Smart(sm) = &mut doc.layer_mut(id).unwrap().content else {
+                                return Err(photocraft_engine::EngineError::Other("expected smart object".into()));
+                            };
+                            sm.filter_mask = Some(LayerMask {
+                                surface: Surface::with_default(photocraft_doc::PixelFormat::GRAY8, &[coverage]),
+                                enabled: true,
+                                linked: true,
+                                density: 1.0,
+                                feather: 0.0,
+                            });
+                            if !photocraft_engine::smart_cmds::refresh(doc, id)? {
+                                return Err(photocraft_engine::EngineError::Other("smart object refresh failed".into()));
+                            }
+                            Ok(())
+                        })
+                        .unwrap();
+                    let (_, before, _) = crate::distort_ui::active_pixels(&app).unwrap();
+                    assert_eq!(before.format().mode, mode);
+                    assert_eq!(
+                        before.format().sample,
+                        match depth {
+                            8 => SampleType::U8,
+                            16 => SampleType::U16,
+                            _ => SampleType::F32,
+                        }
+                    );
+                    let canvas = app.session.active().unwrap().doc.bounds();
+                    let proxy = ProxyImage::new(&before, canvas, PROXY_SIDE);
+                    assert_eq!(proxy.scale, 1.0);
+                    let mut expected = vec![[0; 4]; proxy.w * proxy.h];
+                    proxy.render(&LiquifyField::new(canvas, auto_cell(canvas)), [0, 0, proxy.w, proxy.h], &mut expected);
+                    open(&mut app, &ctx).unwrap();
+                    let dialog = app.distort.liquify.as_ref().unwrap();
+                    assert!(dialog.strokes.is_empty());
+                    assert_eq!(dialog.out.len(), expected.len());
+                    let center = 16 * proxy.w + 15;
+                    assert_eq!(dialog.out[center][3], 255);
+                    assert_eq!(expected[center][3], 255);
+                    let max_rgb_delta =
+                        dialog.out.iter().zip(&expected).flat_map(|(got, want)| (0..3).map(move |c| got[c].abs_diff(want[c]))).max().unwrap_or(0);
+                    if max_rgb_delta > 1 {
+                        failures.push((name, depth, coverage, max_rgb_delta));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "opening Liquify changed cached native colors: {failures:?}");
     }
 
     #[test]
