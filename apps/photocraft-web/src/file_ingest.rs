@@ -54,6 +54,25 @@ pub(crate) struct RoutedDelivery {
     pub lease: Lease,
 }
 
+/// Keeps one admission lease until canvas placement has consumed every queued file.
+/// Dropping the inbox buffers is not consumption: a transform can pause `drop_places`.
+#[derive(Default)]
+pub(crate) struct PlacementHold {
+    lease: Option<Lease>,
+}
+
+impl PlacementHold {
+    pub fn store(&mut self, lease: Lease) {
+        self.lease = Some(lease);
+    }
+
+    pub fn release_if_idle(&mut self, places_pending: bool) {
+        if !places_pending {
+            self.lease = None;
+        }
+    }
+}
+
 impl Delivery {
     /// Keep the admission lease across both queues until the UI consumes them.
     pub fn route(self, places: &[bool]) -> Result<RoutedDelivery, String> {
@@ -169,6 +188,23 @@ mod tests {
         drop(lease);
         let delivery = ready(budget.admit(vec![source(2.0, &reads)]).unwrap().read()).unwrap();
         assert!(delivery.route(&[]).is_err());
+        assert!(budget.admit(vec![source(2.0, &reads)]).is_ok());
+    }
+
+    #[test]
+    fn placement_hold_lasts_until_the_canvas_queue_is_empty() {
+        let budget = budget();
+        let reads = Arc::default();
+        let delivery = ready(budget.admit(vec![source(2.0, &reads), source(2.0, &reads)]).unwrap().read()).unwrap();
+        let routed = delivery.route(&[true, true]).unwrap();
+        let mut hold = PlacementHold::default();
+        hold.store(routed.lease);
+        // The inboxes are drained into drop_places; that move is not consumption.
+        drop(routed.open);
+        drop(routed.place);
+        hold.release_if_idle(true);
+        assert!(budget.admit(vec![source(2.0, &reads)]).is_err(), "a paused transform must keep the reservation");
+        hold.release_if_idle(false);
         assert!(budget.admit(vec![source(2.0, &reads)]).is_ok());
     }
     #[test]
