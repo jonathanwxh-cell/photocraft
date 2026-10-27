@@ -1966,3 +1966,80 @@ fn batch_skips_quick_export_inside_a_played_action() {
     assert_eq!(r["errors"], json!([]), "{r}");
     assert_eq!(batch_pixel(&out), [0.0, 1.0, 1.0, 1.0]);
 }
+
+/// Refuses filesystem file commands, as an untrusted session's authorize hook does for Save a
+/// Copy and Open. Batch and Close stay allowed so a Batch run can start and can close the
+/// document its save point marked; Save a Copy is not on the list.
+fn deny_ambient_file(id: &str, _: &Value) -> Result<()> {
+    const ALLOWED: &[&str] = &["file.automate.batch", "file.close", "file.new"];
+    if id.starts_with("file.") && !ALLOWED.contains(&id) { Err(EngineError::Other(format!("automation command `{id}` is disabled"))) } else { Ok(()) }
+}
+
+/// Batch on `red` with the authorize hook installed, playing `Finish`.
+fn batch_playing_finish_authorized(red: &str, out: &str, finish: Value) -> Value {
+    let called = json!([{"name": "Finish", "steps": finish}]);
+    let steps = json!([["actions.play", {"action": "Finish"}]]);
+    let mut s = Session::new();
+    s.authorize = Some(deny_ambient_file);
+    s.execute("file.automate.batch", json!({"input": [red], "output": out, "format": "png", "steps": steps, "calledActions": called})).unwrap()
+}
+
+/// A Save a Copy inside an action Batch plays is a save point, including when the session's
+/// authorize hook would refuse that command. The hook used to run first and fail the file.
+#[test]
+fn batch_handles_a_nested_save_before_authorize() {
+    let dir = tmp("batch-nested-save-auth");
+    let red = png(&dir, "red.png", 8, 8, "#ff0000");
+    let out = join(&dir, "out");
+    let elsewhere = join(&dir, "elsewhere.png");
+    let finish = json!([["image.adjustments.invert", {}], ["file.saveACopy", {"path": elsewhere}], ["file.close", {}]]);
+    let r = batch_playing_finish_authorized(&red, &out, finish);
+    assert!(!std::path::Path::new(&elsewhere).exists(), "{r}");
+    assert_eq!(r["errors"], json!([]), "{r}");
+    assert_eq!(batch_pixel(&out), [0.0, 1.0, 1.0, 1.0], "the inverted red");
+}
+
+/// Steps Batch does not intercept stay behind the authorize hook: a nested Open is refused and
+/// writes nothing, and the same Save a Copy played outside Batch is refused too. A top-level
+/// Save a Copy in the same authorized run is still only a save point.
+#[test]
+fn authorize_still_rejects_a_step_batch_does_not_handle() {
+    let dir = tmp("batch-auth-keeps-gate");
+    let red = png(&dir, "red.png", 8, 8, "#ff0000");
+    let missing = join(&dir, "missing.png");
+    let opened = batch_playing_finish_authorized(&red, &join(&dir, "opened"), json!([["image.adjustments.invert", {}], ["file.open", {"path": missing}]]));
+    let error = opened["errors"].as_array().and_then(|e| e.first()).and_then(|e| e["error"].as_str()).unwrap_or("");
+    assert!(error.contains("file.open") && error.contains("disabled"), "{opened}");
+    assert!(!std::path::Path::new(&join(&dir, "opened/red.png")).exists(), "{opened}");
+    assert!(!std::path::Path::new(&missing).exists());
+
+    let played = join(&dir, "played.png");
+    let mut s = Session::new();
+    s.execute("file.new", json!({"width": 8, "height": 8, "background": "#ff0000"})).unwrap();
+    s.authorize = Some(deny_ambient_file);
+    s.actions.list.push(crate::actions_cmds::Action::new(
+        "Finish",
+        vec![("image.adjustments.invert".into(), json!({})), ("file.saveACopy".into(), json!({"path": played}))],
+    ));
+    let r = s.execute("actions.play", json!({"action": "Finish"})).unwrap();
+    assert_eq!(r["failed"]["id"], "file.saveACopy");
+    assert!(r["failed"]["error"].as_str().unwrap_or("").contains("disabled"), "{r}");
+    assert!(!std::path::Path::new(&played).exists(), "outside Batch the refused Save a Copy writes nothing");
+
+    let elsewhere = join(&dir, "top-elsewhere.png");
+    let mut top = Session::new();
+    top.authorize = Some(deny_ambient_file);
+    let top = top
+        .execute(
+            "file.automate.batch",
+            json!({"input": [red], "output": join(&dir, "top"), "format": "png", "steps": [
+                ["image.adjustments.invert", {}],
+                ["file.saveACopy", {"path": elsewhere}],
+                ["file.close", {}],
+            ]}),
+        )
+        .unwrap();
+    assert!(!std::path::Path::new(&elsewhere).exists(), "{top}");
+    assert_eq!(top["errors"], json!([]), "{top}");
+    assert_eq!(batch_pixel(&join(&dir, "top")), [0.0, 1.0, 1.0, 1.0]);
+}
