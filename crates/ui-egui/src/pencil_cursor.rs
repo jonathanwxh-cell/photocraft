@@ -145,7 +145,7 @@ fn draw(painter: &Painter, xf: &ViewXform, at: [f64; 2], brush: &BrushSettings, 
 /// `aliased_outline` of `brush`, kept across frames: it changes only with the brush, and a sampled
 /// tip builds its mipmaps to rasterise.
 fn outline(ctx: &egui::Context, brush: &BrushSettings) -> Option<Arc<Rings>> {
-    let id = egui::Id::new("photocraft-pencil-outline");
+    let id = egui::Id::unique("photocraft-pencil-outline");
     if let Some(c) = ctx.data(|d| d.get_temp::<Cached>(id))
         && c.key.matches(brush)
     {
