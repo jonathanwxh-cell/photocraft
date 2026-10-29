@@ -217,7 +217,7 @@ mod tests {
         let at = pos2(200.0, 150.0);
         let shapes = |axes, expected: bool, anisotropic: bool| {
             let ctx = egui::Context::default();
-            let output = ctx.run_ui(Default::default(), |ui| {
+            let mut output = ctx.run_ui(Default::default(), |ui| {
                 if !expected {
                     paint(ui.painter(), at, &brush, 30.0, axes, false);
                 } else if anisotropic {
@@ -227,6 +227,7 @@ mod tests {
                     crate::tool_cursor::paint_circle(ui.painter(), at, 30.0);
                 }
             });
+            output.textures_delta.clear();
             assert!(!output.shapes.is_empty(), "the fallback must paint visible geometry");
             output.shapes.into_iter().map(|s| s.shape).collect::<Vec<_>>()
         };
