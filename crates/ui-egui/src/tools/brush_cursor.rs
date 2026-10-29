@@ -126,7 +126,12 @@ pub(crate) fn cursor(painter: &Painter, at: Pos2, brush: &BrushSettings, radius:
 /// [`cursor`]'s outline, without the centre mark, painted around `at` instead of shown as the OS
 /// pointer: for a tip that lands away from the pointer, as the Pencil's does on the pixel grid.
 pub(crate) fn paint(painter: &Painter, at: Pos2, brush: &BrushSettings, radius: f32, axes: [Vec2; 2], normal: bool) {
-    match rings(painter.ctx(), brush, !normal) {
+    let anisotropic = (axes[0].length_sq() - axes[1].length_sq()).abs() > 0.001 || axes[0].dot(axes[1]).abs() > 0.001;
+    let outline = rings(painter.ctx(), brush, !normal).or_else(|| {
+        // Keep the painted Pencil fallback projected just like the OS cursor.
+        anisotropic.then(|| photocraft_paint::outline::tip_outline(brush, !normal).map(Arc::new)).flatten()
+    });
+    match outline {
         Some(rings) => crate::tool_cursor::paint_outline(painter, at, on_screen(&rings, axes)),
         None => crate::tool_cursor::paint_circle(painter, at, circle_radius(brush, radius, normal)),
     }
@@ -204,6 +209,32 @@ mod tests {
 
     fn close(a: Vec2, b: Vec2) -> bool {
         (a - b).length() < 1e-4
+    }
+
+    #[test]
+    fn painted_round_fallback_preserves_anisotropic_projection() {
+        let brush = BrushSettings { size: 600.0, hardness: 1.0, ..Default::default() };
+        let at = pos2(200.0, 150.0);
+        let shapes = |axes, expected: bool, anisotropic: bool| {
+            let ctx = egui::Context::default();
+            let output = ctx.run_ui(Default::default(), |ui| {
+                if !expected {
+                    paint(ui.painter(), at, &brush, 30.0, axes, false);
+                } else if anisotropic {
+                    let outline = photocraft_paint::outline::tip_outline(&brush, true).expect("round tip has an outline");
+                    crate::tool_cursor::paint_outline(ui.painter(), at, on_screen(&outline, axes));
+                } else {
+                    crate::tool_cursor::paint_circle(ui.painter(), at, 30.0);
+                }
+            });
+            assert!(!output.shapes.is_empty(), "the fallback must paint visible geometry");
+            output.shapes.into_iter().map(|s| s.shape).collect::<Vec<_>>()
+        };
+        for axes in [[egui::vec2(60.0, 0.0), egui::vec2(0.0, 30.0)], [egui::vec2(30.0, 30.0), egui::vec2(-15.0, 15.0)]] {
+            assert_eq!(shapes(axes, false, true), shapes(axes, true, true));
+        }
+        let axes = [egui::vec2(30.0, 0.0), egui::vec2(0.0, 30.0)];
+        assert_eq!(shapes(axes, false, false), shapes(axes, true, false));
     }
 
     /// Component timing only: outline transformation and OS bitmap generation, not presentation
